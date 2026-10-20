@@ -1,0 +1,108 @@
+/* Home layout refinements: prominent trip search + always-visible price summary */
+.trip-cta {
+  width: 100%;
+  min-height: 58px;
+  border: 0;
+  border-radius: 17px;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  color: #fff;
+  background: linear-gradient(135deg, #0d6efd, #0759d2);
+  box-shadow: 0 8px 22px rgba(13, 110, 253, .26);
+  cursor: pointer;
+}
+.trip-cta:active { transform: scale(.995); }
+.trip-cta-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.16);
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+.trip-cta-copy { min-width: 0; display: grid; gap: 1px; }
+.trip-cta-copy strong { font-size: .96rem; line-height: 1.1; }
+.trip-cta-copy small {
+  font-size: .72rem;
+  line-height: 1.2;
+  color: rgba(255,255,255,.88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trip-cta-arrow { font-size: 1.6rem; line-height: 1; text-align: right; opacity: .92; }
+
+.map-card { position: relative; }
+.map-stats {
+  position: absolute;
+  z-index: 900;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  pointer-events: none;
+}
+.map-stats .stat-card {
+  pointer-events: auto;
+  background: rgba(255,255,255,.94);
+  border: 1px solid rgba(207,215,223,.92);
+  box-shadow: 0 5px 18px rgba(22,34,48,.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.map-stats .best-card {
+  background: rgba(239,250,243,.96);
+  border-color: rgba(183,224,198,.96);
+}
+
+@media (max-width: 700px) {
+  .topbar { min-height: 54px; }
+  .brand-icon { width: 36px; height: 36px; }
+  .trip-cta {
+    min-height: 51px;
+    border-radius: 14px;
+    padding: 6px 10px;
+    grid-template-columns: 38px minmax(0,1fr) 18px;
+    gap: 8px;
+  }
+  .trip-cta-icon { width: 38px; height: 38px; border-radius: 11px; font-size: 1.18rem; }
+  .trip-cta-copy strong { font-size: .90rem; }
+  .trip-cta-copy small { font-size: .67rem; }
+  .trip-cta-arrow { font-size: 1.4rem; }
+
+  .controls-card { padding: 7px 8px; gap: 6px; }
+  .fuel-tab { min-height: 34px; }
+  .zone-row select { min-height: 39px; }
+  .small-btn {
+    min-height: 39px;
+    min-width: 104px;
+    padding: 0 8px;
+    font-size: .70rem !important;
+  }
+  .small-btn::first-letter { font-size: inherit !important; }
+  .legend { line-height: 1; }
+
+  #map {
+    height: clamp(315px, calc(100dvh - 335px), 510px);
+    min-height: 315px;
+  }
+  .map-stats { left: 7px; right: 7px; bottom: 7px; gap: 5px; }
+  .map-stats .stat-card { padding: 7px 8px; border-radius: 12px; }
+  .map-stats .stat-label { font-size: .64rem; }
+  .map-stats .stat-card strong { font-size: 1.06rem; margin-top: 1px; }
+  .map-stats .stat-detail { font-size: .60rem; margin-top: 1px; }
+}
+
+@media (max-width: 390px) {
+  .trip-cta-copy small { white-space: normal; max-height: 2.4em; }
+  #map { height: clamp(300px, calc(100dvh - 330px), 470px); min-height: 300px; }
+  .map-stats .stat-detail { display: none; }
+}
