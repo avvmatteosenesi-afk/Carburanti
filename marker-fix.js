@@ -22,62 +22,62 @@
     });
   }
 
-  function findLeafletMarker(icon) {
-    const map = window.__carburantiMap || null;
-    if (map?._layers) {
-      for (const layer of Object.values(map._layers)) {
-        if (layer instanceof L.Marker && (layer.getElement?.() === icon || layer._icon === icon)) return layer;
-      }
-    }
-    for (const key of Object.keys(icon || {})) {
-      const value = icon[key];
-      if (value instanceof L.Marker) return value;
-    }
-    return null;
+  function markerFromIcon(icon) {
+    return icon?.__carburantiMarker || null;
   }
 
-  function openFromTarget(target, ev) {
-    const icon = target?.closest?.('.price-marker-wrap');
-    if (!icon || !icon.closest('#map')) return;
-    const marker = findLeafletMarker(icon);
+  function activate(icon, ev) {
+    const marker = markerFromIcon(icon);
     if (!marker?.getPopup?.()) return;
     if (ev?.cancelable) ev.preventDefault();
     ev?.stopPropagation?.();
     marker.openPopup();
   }
 
-  // Capture before Leaflet's map handlers. This is intentionally delegated so it
-  // survives every renderStations()/clearLayers() cycle and works in iOS PWAs.
-  ['pointerup', 'touchend', 'click'].forEach(type => {
-    document.addEventListener(type, ev => openFromTarget(ev.target, ev), { capture: true, passive: false });
-  });
-
   if (window.L?.Marker) {
     const proto = L.Marker.prototype;
-    if (!proto.__carburantiDirectPopupV6) {
+    if (!proto.__carburantiDirectPopupV7) {
       const originalOnAdd = proto.onAdd;
       proto.onAdd = function(map) {
         const result = originalOnAdd.call(this, map);
         const icon = this.getElement?.() || this._icon;
-        if (icon?.classList?.contains('price-marker-wrap') && this.getPopup?.()) {
-          icon.style.pointerEvents = 'auto';
-          icon.style.touchAction = 'manipulation';
-          icon.style.cursor = 'pointer';
-          icon.__carburantiMarker = this;
-          icon.setAttribute('role', 'button');
-          icon.setAttribute('tabindex', '0');
-          icon.setAttribute('aria-label', `Prezzo carburante ${icon.textContent?.trim() || ''}. Apri dettagli distributore`);
-          icon.addEventListener('keydown', ev => {
-            if (ev.key === 'Enter' || ev.key === ' ') {
-              ev.preventDefault();
-              this.openPopup();
+        if (!icon?.classList?.contains('price-marker-wrap') || !this.getPopup?.()) return result;
+
+        icon.__carburantiMarker = this;
+        icon.style.pointerEvents = 'auto';
+        icon.style.touchAction = 'manipulation';
+        icon.style.cursor = 'pointer';
+        icon.setAttribute('role', 'button');
+        icon.setAttribute('tabindex', '0');
+        icon.setAttribute('aria-label', `Prezzo carburante ${icon.textContent?.trim() || ''}. Apri dettagli distributore`);
+
+        // Bind directly to every Leaflet marker. This avoids ambiguous hit-testing
+        // when price labels overlap: the visually topmost marker receives the tap.
+        if (!icon.__carburantiBoundV7) {
+          icon.__carburantiBoundV7 = true;
+          let touchHandledAt = 0;
+          icon.addEventListener('touchend', ev => {
+            touchHandledAt = Date.now();
+            activate(icon, ev);
+          }, { passive: false });
+          icon.addEventListener('pointerup', ev => {
+            if (ev.pointerType === 'touch') return;
+            activate(icon, ev);
+          }, { passive: false });
+          icon.addEventListener('click', ev => {
+            if (Date.now() - touchHandledAt < 600) {
+              ev.preventDefault(); ev.stopPropagation(); return;
             }
+            activate(icon, ev);
+          }, false);
+          icon.addEventListener('keydown', ev => {
+            if (ev.key === 'Enter' || ev.key === ' ') activate(icon, ev);
           });
         }
         setTimeout(recolorHomeMarkers, 0);
         return result;
       };
-      proto.__carburantiDirectPopupV6 = true;
+      proto.__carburantiDirectPopupV7 = true;
     }
   }
 
