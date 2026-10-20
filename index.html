@@ -16,6 +16,7 @@
   <link rel="preconnect" href="https://tile.openstreetmap.org">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="style.css?v=20261020-3">
+  <link rel="stylesheet" href="home-ui.css?v=20261020-1">
 </head>
 <body>
   <main class="app-shell">
@@ -28,12 +29,18 @@
         </div>
       </div>
       <div class="top-actions">
-        <button id="tripOpenBtn" class="icon-btn primary-action" type="button" aria-label="Apri Viaggio" title="Viaggio">
-          <span aria-hidden="true">↗</span><span class="action-label">Viaggio</span>
-        </button>
         <button id="settingsBtn" class="icon-btn" type="button" aria-label="Impostazioni" title="Impostazioni">⚙︎</button>
       </div>
     </header>
+
+    <button id="tripOpenBtn" class="trip-cta" type="button" aria-label="Viaggio: cerca distributori lungo un percorso" title="Cerca distributori e prezzi lungo un percorso specifico">
+      <span class="trip-cta-icon" aria-hidden="true">↗</span>
+      <span class="trip-cta-copy">
+        <strong>Viaggio</strong>
+        <small>Cerca distributori e prezzi lungo un percorso specifico</small>
+      </span>
+      <span class="trip-cta-arrow" aria-hidden="true">›</span>
+    </button>
 
     <section class="controls-card" aria-label="Filtri">
       <div class="fuel-tabs" role="group" aria-label="Carburante">
@@ -69,7 +76,7 @@
           <option value="tuscany">Tutta la Toscana</option>
           <option value="free">Libera</option>
         </select>
-        <button id="locateBtn" class="small-btn" type="button">⌖ Posizione</button>
+        <button id="locateBtn" class="small-btn" type="button" aria-label="Verifica e torna alla mia posizione" title="Verifica la posizione corrente e ricentra la mappa">⌖ Mia posizione</button>
       </div>
 
       <div class="legend" aria-label="Legenda prezzi">
@@ -84,19 +91,19 @@
       <div id="map" role="application" aria-label="Mappa distributori"></div>
       <div id="mapNotice" class="map-notice hidden"></div>
       <button id="freeModeBadge" class="mode-badge hidden" type="button">Modalità Libera</button>
-    </section>
 
-    <section class="stats-grid bottom-stats" aria-label="Riepilogo prezzi">
-      <article id="bestCard" class="stat-card best-card" role="button" tabindex="0" aria-disabled="true" title="Apri il distributore con il prezzo minimo">
-        <span class="stat-label">Minimo nella mia zona · 10 km</span>
-        <strong id="bestPrice">—</strong>
-        <span id="bestStation" class="stat-detail">—</span>
-      </article>
-      <article class="stat-card">
-        <span class="stat-label">Prezzo medio zona</span>
-        <strong id="avgPrice">—</strong>
-        <span id="visibleCount" class="stat-detail">0 impianti</span>
-      </article>
+      <section class="stats-grid map-stats" aria-label="Riepilogo prezzi">
+        <article id="bestCard" class="stat-card best-card" role="button" tabindex="0" aria-disabled="true" title="Apri il distributore con il prezzo minimo">
+          <span class="stat-label">Minimo nella mia zona · 10 km</span>
+          <strong id="bestPrice">—</strong>
+          <span id="bestStation" class="stat-detail">—</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Prezzo medio zona</span>
+          <strong id="avgPrice">—</strong>
+          <span id="visibleCount" class="stat-detail">0 impianti</span>
+        </article>
+      </section>
     </section>
 
     <footer class="footer-note">
@@ -192,9 +199,10 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="bootstrap.js?v=20261020-7"></script>
+  <script src="bootstrap.js?v=20261020-8"></script>
   <script src="app.js?v=20261020-3"></script>
   <script src="trip.js?v=20261020-3"></script>
   <script src="zone-zoom.js?v=20261020-1"></script>
+  <script src="home-ui.js?v=20261020-2"></script>
 </body>
 </html>
