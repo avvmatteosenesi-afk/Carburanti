@@ -22,14 +22,48 @@
     });
   }
 
-  // Do not intercept touch/click events here. Leaflet already binds popup opening
-  // to each L.Marker; custom touch handlers can suppress its synthetic click on iOS.
+  // Leaflet divIcon wrappers are the actual interactive elements. Make the whole
+  // rendered price label the hit target and open the marker popup directly.
+  function bindMarker(marker) {
+    const icon = marker?.getElement?.() || marker?._icon;
+    if (!icon || !marker.getPopup?.() || icon.__carburantiTapV9) return;
+    icon.__carburantiTapV9 = true;
+    icon.__carburantiMarker = marker;
+    icon.style.pointerEvents = 'auto';
+    icon.style.touchAction = 'manipulation';
+    icon.style.cursor = 'pointer';
+    icon.setAttribute('role', 'button');
+    icon.setAttribute('tabindex', '0');
+
+    const open = ev => {
+      if (ev?.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+      if (ev?.cancelable) ev.preventDefault();
+      ev?.stopPropagation?.();
+      marker.openPopup();
+    };
+    icon.addEventListener('click', open, false);
+    icon.addEventListener('keydown', open, false);
+  }
+
+  if (window.L?.Marker) {
+    const proto = L.Marker.prototype;
+    if (!proto.__carburantiTapPatchV9) {
+      const originalOnAdd = proto.onAdd;
+      proto.onAdd = function(map) {
+        const result = originalOnAdd.call(this, map);
+        if ((this.getElement?.() || this._icon)?.classList?.contains('price-marker-wrap')) {
+          requestAnimationFrame(() => bindMarker(this));
+        }
+        return result;
+      };
+      proto.__carburantiTapPatchV9 = true;
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(recolorHomeMarkers, 50));
     const best = document.getElementById('bestPrice');
     if (best) new MutationObserver(() => setTimeout(recolorHomeMarkers, 0)).observe(best, { childList: true, subtree: true });
-    const map = document.getElementById('map');
-    if (map) new MutationObserver(() => setTimeout(recolorHomeMarkers, 0)).observe(map, { childList: true, subtree: true });
     setTimeout(recolorHomeMarkers, 700);
   });
 })();
