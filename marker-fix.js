@@ -20,45 +20,64 @@
       const cls = d <= 0.0005 ? 'best' : d <= nearLimit ? 'near' : d <= goodLimit ? 'good' : 'normal';
       ['best','near','good','normal'].forEach(c => el.classList.toggle(c, c === cls));
     });
-    const spans = document.querySelectorAll('.controls-card .legend span');
-    if (spans[1]) spans[1].lastChild.textContent = wide ? ' entro 10 cent' : ' entro 5 cent';
-    if (spans[2]) spans[2].lastChild.textContent = wide ? ' entro 20 cent' : ' entro 10 cent';
   }
+
+  function findLeafletMarker(icon) {
+    const map = window.__carburantiMap || null;
+    if (map?._layers) {
+      for (const layer of Object.values(map._layers)) {
+        if (layer instanceof L.Marker && (layer.getElement?.() === icon || layer._icon === icon)) return layer;
+      }
+    }
+    for (const key of Object.keys(icon || {})) {
+      const value = icon[key];
+      if (value instanceof L.Marker) return value;
+    }
+    return null;
+  }
+
+  function openFromTarget(target, ev) {
+    const icon = target?.closest?.('.price-marker-wrap');
+    if (!icon || !icon.closest('#map')) return;
+    const marker = findLeafletMarker(icon);
+    if (!marker?.getPopup?.()) return;
+    if (ev?.cancelable) ev.preventDefault();
+    ev?.stopPropagation?.();
+    marker.openPopup();
+  }
+
+  // Capture before Leaflet's map handlers. This is intentionally delegated so it
+  // survives every renderStations()/clearLayers() cycle and works in iOS PWAs.
+  ['pointerup', 'touchend', 'click'].forEach(type => {
+    document.addEventListener(type, ev => openFromTarget(ev.target, ev), { capture: true, passive: false });
+  });
 
   if (window.L?.Marker) {
     const proto = L.Marker.prototype;
-    if (!proto.__carburantiDirectPopupV5) {
+    if (!proto.__carburantiDirectPopupV6) {
       const originalOnAdd = proto.onAdd;
       proto.onAdd = function(map) {
         const result = originalOnAdd.call(this, map);
         const icon = this.getElement?.() || this._icon;
-        if (!icon || !icon.classList?.contains('price-marker-wrap') || !this.getPopup?.()) return result;
-        icon.style.pointerEvents = 'auto';
-        icon.style.touchAction = 'manipulation';
-        icon.setAttribute('role', 'button');
-        icon.setAttribute('tabindex', '0');
-        icon.setAttribute('aria-label', `Prezzo carburante ${icon.textContent?.trim() || ''}. Apri dettagli distributore`);
-        if (!icon.__carburantiPopupBound) {
-          icon.__carburantiPopupBound = true;
-          const marker = this;
-          let lastOpen = 0;
-          const open = ev => {
-            const now = Date.now();
-            if (now - lastOpen < 250) return;
-            lastOpen = now;
-            if (ev?.cancelable) ev.preventDefault();
-            ev?.stopPropagation?.();
-            marker.openPopup();
-          };
-          icon.addEventListener('pointerup', open, { passive: false });
-          icon.addEventListener('touchend', open, { passive: false });
-          icon.addEventListener('click', open, false);
-          icon.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') open(ev); });
+        if (icon?.classList?.contains('price-marker-wrap') && this.getPopup?.()) {
+          icon.style.pointerEvents = 'auto';
+          icon.style.touchAction = 'manipulation';
+          icon.style.cursor = 'pointer';
+          icon.__carburantiMarker = this;
+          icon.setAttribute('role', 'button');
+          icon.setAttribute('tabindex', '0');
+          icon.setAttribute('aria-label', `Prezzo carburante ${icon.textContent?.trim() || ''}. Apri dettagli distributore`);
+          icon.addEventListener('keydown', ev => {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+              ev.preventDefault();
+              this.openPopup();
+            }
+          });
         }
         setTimeout(recolorHomeMarkers, 0);
         return result;
       };
-      proto.__carburantiDirectPopupV5 = true;
+      proto.__carburantiDirectPopupV6 = true;
     }
   }
 
