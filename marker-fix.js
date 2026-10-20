@@ -1,42 +1,45 @@
 (() => {
   'use strict';
 
-  function markerForIcon(icon) {
-    if (!icon || !window.L) return null;
-    const leafletId = icon._leaflet_id || L.Util.stamp(icon);
-    const homeMap = window.CarburantiApp?.state?.map;
-    const tripMap = window.CarburantiTrip?.map;
-    return homeMap?._targets?.[leafletId] || tripMap?._targets?.[leafletId] || null;
-  }
+  if (!window.L?.Marker) return;
 
-  function activate(target, ev) {
-    const icon = target?.closest?.('.price-marker-wrap');
-    if (!icon) return;
-    const marker = markerForIcon(icon);
-    if (!marker?.getPopup?.()) return;
-    const now = Date.now();
-    if (marker.__carburantiTapAt && now - marker.__carburantiTapAt < 300) return;
-    marker.__carburantiTapAt = now;
-    if (ev?.cancelable) ev.preventDefault();
-    ev?.stopPropagation?.();
-    try { marker.openPopup(); } catch (_) {}
-  }
+  const proto = L.Marker.prototype;
+  if (proto.__carburantiDirectPopupV4) return;
+  const originalOnAdd = proto.onAdd;
 
-  function bind(container) {
-    if (!container || container.__carburantiDelegatedTap) return;
-    container.__carburantiDelegatedTap = true;
-    const handler = ev => activate(ev.target, ev);
-    container.addEventListener('pointerup', handler, true);
-    container.addEventListener('touchend', handler, { capture: true, passive: false });
-    container.addEventListener('click', handler, true);
-  }
+  proto.onAdd = function(map) {
+    const result = originalOnAdd.call(this, map);
+    const icon = this.getElement?.() || this._icon;
+    if (!icon || !icon.classList?.contains('price-marker-wrap') || !this.getPopup?.()) return result;
 
-  function bindAll() {
-    bind(document.getElementById('map'));
-    bind(document.getElementById('tripMap'));
-  }
+    icon.style.pointerEvents = 'auto';
+    icon.style.touchAction = 'manipulation';
+    icon.setAttribute('role', 'button');
+    icon.setAttribute('tabindex', '0');
+    icon.setAttribute('aria-label', `Prezzo carburante ${icon.textContent?.trim() || ''}. Apri dettagli distributore`);
 
-  document.addEventListener('DOMContentLoaded', bindAll);
-  window.addEventListener('load', bindAll);
-  setTimeout(bindAll, 1000);
+    if (icon.__carburantiPopupBound) return result;
+    icon.__carburantiPopupBound = true;
+    const marker = this;
+    let lastOpen = 0;
+    const open = ev => {
+      const now = Date.now();
+      if (now - lastOpen < 250) return;
+      lastOpen = now;
+      if (ev?.cancelable) ev.preventDefault();
+      ev?.stopPropagation?.();
+      L.DomEvent.stopPropagation(ev);
+      marker.openPopup();
+    };
+
+    icon.addEventListener('pointerup', open, { passive: false });
+    icon.addEventListener('touchend', open, { passive: false });
+    icon.addEventListener('click', open, false);
+    icon.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' ') open(ev);
+    });
+    return result;
+  };
+
+  proto.__carburantiDirectPopupV4 = true;
 })();
