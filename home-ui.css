@@ -90,9 +90,22 @@
   .small-btn::first-letter { font-size: inherit !important; }
   .legend { line-height: 1; }
 
+  /* La mappa arriva realmente ai bordi dello schermo; il resto della home mantiene il margine. */
+  .map-card {
+    width: calc(100% + 10px);
+    margin-left: -5px;
+    margin-right: -5px;
+    padding: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    box-shadow: 0 8px 24px rgba(22,34,48,.10);
+  }
   #map {
+    width: 100%;
     height: clamp(315px, calc(100dvh - 335px), 510px);
     min-height: 315px;
+    border-radius: 0;
   }
   .map-stats { left: 7px; right: 7px; bottom: 7px; gap: 5px; }
   .map-stats .stat-card { padding: 7px 8px; border-radius: 12px; }
