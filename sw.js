@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'carburanti-shell-20261020-7';
+const CACHE_VERSION = 'carburanti-shell-20261020-8';
 const DATA_CACHE = 'carburanti-data-v1';
 const SHELL = [
   './',
@@ -7,6 +7,7 @@ const SHELL = [
   './bootstrap.js?v=20261020-7',
   './app.js?v=20261020-3',
   './trip.js?v=20261020-3',
+  './zone-zoom.js?v=20261020-1',
   './manifest.webmanifest?v=20261020-3',
   './icon.svg?v=20261020-3',
   './favicon.svg?v=20261020-3',
