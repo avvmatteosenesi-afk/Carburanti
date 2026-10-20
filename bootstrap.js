@@ -1,11 +1,12 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261020-6';
+  const VERSION = '20261020-7';
   const GEO_CONSENT_KEY = 'carburanti:geo-consent:v3';
   const LAST_POSITION_KEY = 'carburanti:last-position:v1';
   const RAW_BASE = 'https://raw.githubusercontent.com/avvmatteosenesi-afk/Carburanti/main/data/';
   const LOCAL_RADIUS_KM = 10;
+  const INITIAL_LOCAL_ZOOM = 13;
   const nativeFetch = window.fetch.bind(window);
 
   // Fallback dei dataset: se GitHub Pages non risponde, prova il file raw del repository.
@@ -135,13 +136,6 @@
     return 'Non riesco a ottenere la posizione. Tocca “Riprova”.';
   }
 
-  function localBounds(lat, lon) {
-    const latDelta = LOCAL_RADIUS_KM / 111.32;
-    const cosLat = Math.max(0.2, Math.cos(lat * Math.PI / 180));
-    const lonDelta = LOCAL_RADIUS_KM / (111.32 * cosLat);
-    return [[lat - latDelta, lon - lonDelta], [lat + latDelta, lon + lonDelta]];
-  }
-
   function forceLocalView(posLike) {
     const app = window.CarburantiApp;
     const state = app?.state;
@@ -166,13 +160,12 @@
 
     try {
       map.invalidateSize(false);
-      map.fitBounds(localBounds(lat, lon), { padding: [28, 28], maxZoom: 13, animate: false });
+      map.setView([lat, lon], INITIAL_LOCAL_ZOOM, { animate: false });
     } catch (_) {
-      try { map.setView([lat, lon], 12, { animate: false }); } catch (_) {}
+      try { map.setView([lat, lon], INITIAL_LOCAL_ZOOM, { animate: false }); } catch (_) {}
     }
 
-    // Un movimento della mappa richiama il rendering. Il click sul carburante attivo
-    // è un secondo trigger intenzionale, utile anche se il moveend è già avvenuto.
+    // Il raggio logico resta 10 km; lo zoom iniziale è volutamente più ravvicinato.
     setTimeout(() => {
       try { document.querySelector('.fuel-tab.active')?.click(); } catch (_) {}
       setWait('', false);
