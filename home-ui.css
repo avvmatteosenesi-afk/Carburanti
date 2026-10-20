@@ -1,42 +1,32 @@
-/* Home layout refinements: prominent trip search + always-visible price summary */
-.trip-cta {
-  width: 100%;
-  min-height: 58px;
+/* Home layout refinements: compact trip action + always-visible price summary */
+.trip-top-btn {
+  min-height: 44px;
   border: 0;
-  border-radius: 17px;
-  padding: 8px 12px;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 22px;
+  border-radius: 13px;
+  padding: 5px 9px;
+  display: inline-grid;
+  grid-template-columns: 24px auto;
   align-items: center;
-  gap: 10px;
-  text-align: left;
+  gap: 6px;
   color: #fff;
   background: linear-gradient(135deg, #0d6efd, #0759d2);
-  box-shadow: 0 8px 22px rgba(13, 110, 253, .26);
+  box-shadow: 0 5px 16px rgba(13,110,253,.25);
   cursor: pointer;
 }
-.trip-cta:active { transform: scale(.995); }
-.trip-cta-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  background: rgba(255,255,255,.16);
-  font-size: 1.35rem;
-  font-weight: 900;
+.trip-top-btn:active { transform: scale(.98); }
+.trip-top-icon { font-size: 1.08rem; font-weight: 900; text-align: center; }
+.trip-top-copy { display: grid; line-height: 1; text-align: left; }
+.trip-top-copy strong { font-size: .78rem; }
+.trip-top-copy small { margin-top: 2px; font-size: .57rem; color: rgba(255,255,255,.82); }
+.top-actions { flex: 0 0 auto; align-items: center; }
+
+/* Se il permesso era già stato concesso, un eventuale pannello transitorio resta invisibile.
+   Se serve davvero l'intervento dell'utente, appare solo dopo un breve controllo. */
+.geo-consent-backdrop:not(.hidden) { animation: geoConsentDeferred .01s linear .9s both; }
+@keyframes geoConsentDeferred {
+  from { opacity: 0; visibility: hidden; }
+  to { opacity: 1; visibility: visible; }
 }
-.trip-cta-copy { min-width: 0; display: grid; gap: 1px; }
-.trip-cta-copy strong { font-size: .96rem; line-height: 1.1; }
-.trip-cta-copy small {
-  font-size: .72rem;
-  line-height: 1.2;
-  color: rgba(255,255,255,.88);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.trip-cta-arrow { font-size: 1.6rem; line-height: 1; text-align: right; opacity: .92; }
 
 .map-card { position: relative; }
 .map-stats {
@@ -65,18 +55,16 @@
 
 @media (max-width: 700px) {
   .topbar { min-height: 54px; }
-  .brand-icon { width: 36px; height: 36px; }
-  .trip-cta {
-    min-height: 51px;
-    border-radius: 14px;
-    padding: 6px 10px;
-    grid-template-columns: 38px minmax(0,1fr) 18px;
-    gap: 8px;
-  }
-  .trip-cta-icon { width: 38px; height: 38px; border-radius: 11px; font-size: 1.18rem; }
-  .trip-cta-copy strong { font-size: .90rem; }
-  .trip-cta-copy small { font-size: .67rem; }
-  .trip-cta-arrow { font-size: 1.4rem; }
+  .brand-wrap { gap: 7px; min-width: 0; }
+  .brand-icon { width: 34px; height: 34px; }
+  .brand-wrap h1 { font-size: 1rem; }
+  .brand-wrap .subtle { max-width: 145px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-actions { gap: 5px; }
+  .trip-top-btn { min-height: 40px; border-radius: 11px; padding: 4px 7px; grid-template-columns: 20px auto; gap: 4px; }
+  .trip-top-icon { font-size: .98rem; }
+  .trip-top-copy strong { font-size: .72rem; }
+  .trip-top-copy small { font-size: .52rem; }
+  .top-actions .icon-btn { min-width: 40px; min-height: 40px; padding: 0 9px; }
 
   .controls-card { padding: 7px 8px; gap: 6px; }
   .fuel-tab { min-height: 34px; }
@@ -90,7 +78,7 @@
   .small-btn::first-letter { font-size: inherit !important; }
   .legend { line-height: 1; }
 
-  /* La mappa arriva realmente ai bordi dello schermo; il resto della home mantiene il margine. */
+  /* Mappa full-bleed: arriva ai margini reali dello schermo. */
   .map-card {
     width: calc(100% + 10px);
     margin-left: -5px;
@@ -103,8 +91,8 @@
   }
   #map {
     width: 100%;
-    height: clamp(315px, calc(100dvh - 335px), 510px);
-    min-height: 315px;
+    height: clamp(330px, calc(100dvh - 245px), 620px);
+    min-height: 330px;
     border-radius: 0;
   }
   .map-stats { left: 7px; right: 7px; bottom: 7px; gap: 5px; }
@@ -115,7 +103,9 @@
 }
 
 @media (max-width: 390px) {
-  .trip-cta-copy small { white-space: normal; max-height: 2.4em; }
-  #map { height: clamp(300px, calc(100dvh - 330px), 470px); min-height: 300px; }
+  .brand-wrap .subtle { max-width: 118px; }
+  .trip-top-copy small { display: none; }
+  .trip-top-btn { grid-template-columns: 18px auto; }
+  #map { height: clamp(320px, calc(100dvh - 235px), 570px); min-height: 320px; }
   .map-stats .stat-detail { display: none; }
 }
