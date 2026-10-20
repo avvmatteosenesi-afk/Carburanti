@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f7f9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Carburanti">
+  <meta name="description" content="Prezzi carburanti MIMIT in Toscana e lungo i viaggi in Italia.">
+  <title>Carburanti</title>
+  <link rel="manifest" href="manifest.webmanifest?v=20261020-1">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=20261020-1">
+  <link rel="icon" href="favicon.svg?v=20261020-1" type="image/svg+xml">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="style.css?v=20261020-1">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand-wrap">
+        <img class="brand-icon" src="icon.svg?v=20261020-1" alt="">
+        <div>
+          <h1>Carburanti</h1>
+          <p id="dataStatus" class="subtle">Caricamento prezzi MIMIT…</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button id="tripOpenBtn" class="icon-btn primary-action" type="button" aria-label="Apri Viaggio" title="Viaggio">
+          <span aria-hidden="true">↗</span><span class="action-label">Viaggio</span>
+        </button>
+        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Impostazioni" title="Impostazioni">⚙︎</button>
+      </div>
+    </header>
+
+    <section class="controls-card" aria-label="Filtri">
+      <div class="fuel-tabs" role="group" aria-label="Carburante">
+        <button class="fuel-tab active" data-fuel="benzina" type="button">Benzina</button>
+        <button class="fuel-tab" data-fuel="gasolio" type="button">Gasolio</button>
+        <button class="fuel-tab" data-fuel="gpl" type="button">GPL</button>
+        <button class="fuel-tab" data-fuel="metano" type="button">Metano</button>
+      </div>
+
+      <div class="zone-row">
+        <label class="select-label" for="zoneSelect">Zona</label>
+        <select id="zoneSelect" aria-label="Zona da visualizzare">
+          <option value="position">Posizione attuale · 30 km</option>
+          <optgroup label="Zone rapide">
+            <option value="quick:pistoia-firenze">Pistoia → Firenze</option>
+            <option value="quick:pistoia-prato">Pistoia → Prato</option>
+            <option value="quick:prato-firenze">Prato → Firenze</option>
+            <option value="quick:pistoia-agliana">Pistoia / Agliana</option>
+            <option value="quick:agliana-prato">Agliana / Prato</option>
+          </optgroup>
+          <optgroup label="Province">
+            <option value="province:AR">Arezzo</option>
+            <option value="province:FI">Firenze</option>
+            <option value="province:GR">Grosseto</option>
+            <option value="province:LI">Livorno</option>
+            <option value="province:LU">Lucca</option>
+            <option value="province:MS">Massa-Carrara</option>
+            <option value="province:PI">Pisa</option>
+            <option value="province:PT">Pistoia</option>
+            <option value="province:PO">Prato</option>
+            <option value="province:SI">Siena</option>
+          </optgroup>
+          <option value="tuscany">Tutta la Toscana</option>
+          <option value="free">Libera</option>
+        </select>
+        <button id="locateBtn" class="small-btn" type="button">⌖ Posizione</button>
+      </div>
+
+      <div class="stats-grid">
+        <article class="stat-card best-card">
+          <span class="stat-label">Minimo entro 30 km</span>
+          <strong id="bestPrice">—</strong>
+          <span id="bestStation" class="stat-detail">—</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Media visibile</span>
+          <strong id="avgPrice">—</strong>
+          <span id="visibleCount" class="stat-detail">0 impianti</span>
+        </article>
+      </div>
+
+      <div class="legend" aria-label="Legenda prezzi">
+        <span><i class="dot best"></i> minimo</span>
+        <span><i class="dot near"></i> entro 1 cent</span>
+        <span><i class="dot good"></i> entro 3 cent</span>
+        <span><i class="dot normal"></i> altri</span>
+      </div>
+    </section>
+
+    <section class="map-card">
+      <div id="map" role="application" aria-label="Mappa distributori"></div>
+      <div id="mapNotice" class="map-notice hidden"></div>
+      <button id="freeModeBadge" class="mode-badge hidden" type="button">Modalità Libera</button>
+    </section>
+
+    <footer class="footer-note">
+      Dati prezzi e impianti: MIMIT. I prezzi sono quelli comunicati dai gestori; verifica sempre sul posto.
+    </footer>
+  </main>
+
+  <div id="settingsPanel" class="sheet-backdrop hidden" aria-hidden="true">
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="sheet-head">
+        <h2 id="settingsTitle">Impostazioni</h2>
+        <button id="settingsCloseBtn" class="close-btn" type="button" aria-label="Chiudi">×</button>
+      </div>
+      <label class="field-label" for="defaultFuelSelect">Carburante predefinito</label>
+      <select id="defaultFuelSelect">
+        <option value="benzina">Benzina</option>
+        <option value="gasolio">Gasolio</option>
+        <option value="gpl">GPL</option>
+        <option value="metano">Metano</option>
+      </select>
+
+      <label class="field-label" for="defaultZoneSelect">Zona all’apertura</label>
+      <select id="defaultZoneSelect">
+        <option value="position">Posizione attuale · 30 km</option>
+        <option value="quick:pistoia-firenze">Pistoia → Firenze</option>
+        <option value="quick:pistoia-prato">Pistoia → Prato</option>
+        <option value="quick:prato-firenze">Prato → Firenze</option>
+        <option value="quick:pistoia-agliana">Pistoia / Agliana</option>
+        <option value="quick:agliana-prato">Agliana / Prato</option>
+        <option value="province:AR">Provincia di Arezzo</option>
+        <option value="province:FI">Provincia di Firenze</option>
+        <option value="province:GR">Provincia di Grosseto</option>
+        <option value="province:LI">Provincia di Livorno</option>
+        <option value="province:LU">Provincia di Lucca</option>
+        <option value="province:MS">Provincia di Massa-Carrara</option>
+        <option value="province:PI">Provincia di Pisa</option>
+        <option value="province:PT">Provincia di Pistoia</option>
+        <option value="province:PO">Provincia di Prato</option>
+        <option value="province:SI">Provincia di Siena</option>
+        <option value="tuscany">Tutta la Toscana</option>
+        <option value="free">Libera</option>
+      </select>
+      <p class="sheet-help">Con “Posizione attuale · 30 km” la posizione viene ricalcolata a ogni apertura dell’app.</p>
+      <button id="saveSettingsBtn" class="wide-btn" type="button">Salva impostazioni</button>
+    </section>
+  </div>
+
+  <div id="tripPanel" class="trip-overlay hidden" aria-hidden="true">
+    <section class="trip-shell" role="dialog" aria-modal="true" aria-labelledby="tripTitle">
+      <header class="trip-head">
+        <div>
+          <span class="eyebrow">Modalità</span>
+          <h2 id="tripTitle">Viaggio</h2>
+        </div>
+        <button id="tripCloseBtn" class="close-btn" type="button" aria-label="Chiudi viaggio">×</button>
+      </header>
+
+      <div class="trip-form">
+        <div class="trip-field-wrap">
+          <label for="tripFrom">Da</label>
+          <div class="input-action-row">
+            <input id="tripFrom" type="text" autocomplete="off" placeholder="Partenza">
+            <button id="tripFromLocation" class="input-action" type="button" title="Usa posizione attuale">⌖</button>
+          </div>
+        </div>
+        <div class="trip-field-wrap">
+          <label for="tripTo">A</label>
+          <div class="input-action-row">
+            <input id="tripTo" type="text" autocomplete="off" placeholder="Destinazione">
+            <button id="tripToLocation" class="input-action" type="button" title="Usa posizione attuale">⌖</button>
+          </div>
+        </div>
+        <button id="tripGoBtn" class="wide-btn" type="button">Calcola percorso</button>
+      </div>
+
+      <div id="tripSummary" class="trip-summary hidden">
+        <div><span>Distanza</span><strong id="tripDistance">—</strong></div>
+        <div><span>Tempo</span><strong id="tripDuration">—</strong></div>
+        <div><span>Miglior prezzo</span><strong id="tripBest">—</strong></div>
+      </div>
+
+      <div id="tripMessage" class="trip-message subtle">Inserisci partenza e destinazione. La ricerca copre tutta Italia.</div>
+      <div id="tripMap"></div>
+      <div class="trip-bottom-row">
+        <div class="trip-legend legend">
+          <span><i class="dot best"></i> minimo</span>
+          <span><i class="dot near"></i> +1 cent</span>
+          <span><i class="dot good"></i> +3 cent</span>
+        </div>
+        <button id="tripEndBtn" class="secondary-btn" type="button">Chiudi viaggio</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="app.js?v=20261020-1"></script>
+  <script src="trip.js?v=20261020-1"></script>
+</body>
+</html>
