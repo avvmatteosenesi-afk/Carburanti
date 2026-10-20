@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261020-7';
+  const VERSION = '20261020-8';
   const GEO_CONSENT_KEY = 'carburanti:geo-consent:v3';
   const LAST_POSITION_KEY = 'carburanti:last-position:v1';
   const RAW_BASE = 'https://raw.githubusercontent.com/avvmatteosenesi-afk/Carburanti/main/data/';
@@ -21,8 +21,14 @@
     return nativeFetch(`${RAW_BASE}${match[1]}?v=${VERSION}-${Date.now()}`, { ...init, cache: 'no-store' });
   };
 
+  function hasRememberedConsent() {
+    try { return localStorage.getItem(GEO_CONSENT_KEY) === '1'; } catch (_) { return false; }
+  }
+
   let nativeGeo = null;
-  let geoArmed = false;
+  // Se l'utente ha già autorizzato in una sessione precedente, non intercettare la
+  // richiesta per mostrare nuovamente il pannello dell'app: tenta direttamente il GPS.
+  let geoArmed = hasRememberedConsent();
   let pendingGeo = null;
 
   try {
@@ -43,6 +49,10 @@
 
   function rememberConsent() {
     try { localStorage.setItem(GEO_CONSENT_KEY, '1'); } catch (_) {}
+  }
+
+  function forgetConsent() {
+    try { localStorage.removeItem(GEO_CONSENT_KEY); } catch (_) {}
   }
 
   function savePosition(pos) {
@@ -165,7 +175,6 @@
       try { map.setView([lat, lon], INITIAL_LOCAL_ZOOM, { animate: false }); } catch (_) {}
     }
 
-    // Il raggio logico resta 10 km; lo zoom iniziale è volutamente più ravvicinato.
     setTimeout(() => {
       try { document.querySelector('.fuel-tab.active')?.click(); } catch (_) {}
       setWait('', false);
@@ -181,6 +190,7 @@
 
   function applyPosition(pos) {
     rememberConsent();
+    geoArmed = true;
     savePosition(pos);
     closePrompt();
     forceLocalView(pos);
@@ -199,6 +209,10 @@
     }, err => {
       try { req.error?.(err); } catch (_) {}
       if (window.CarburantiApp?.state) window.CarburantiApp.state.locating = false;
+      if (err?.code === 1) {
+        forgetConsent();
+        geoArmed = false;
+      }
       showPrompt(permissionMessage(err), 'Riprova');
       setWait('Posizione necessaria per mostrare i distributori entro 10 km', true);
     }, options);
@@ -242,8 +256,27 @@
     const current = window.CarburantiApp?.getUserPosition?.();
     if (current && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {
       rememberConsent();
+      geoArmed = true;
       closePrompt();
       forceLocalView(current);
+      return;
+    }
+
+    // iOS/PWA spesso non espone correttamente navigator.permissions. Se l'utente ha
+    // già concesso l'accesso in precedenza, prova direttamente il GPS senza far
+    // lampeggiare il pannello di consenso. Se il permesso è stato revocato, l'errore
+    // nativo riaprirà il pannello con il messaggio corretto.
+    if (hasRememberedConsent()) {
+      geoArmed = true;
+      closePrompt();
+      setWait('Rilevamento della posizione in corso…', true);
+      if (pendingGeo) {
+        const req = pendingGeo;
+        pendingGeo = null;
+        requestNative(req);
+      } else {
+        requestNative();
+      }
       return;
     }
 
@@ -299,8 +332,6 @@
 
     prepareGeo();
 
-    // Rescue per iOS/PWA: se l'app ha già ricevuto le coordinate ma il codice principale
-    // si è interrotto durante lo zoom, forza comunque vista locale e rendering.
     let checks = 0;
     const timer = setInterval(() => {
       checks += 1;
