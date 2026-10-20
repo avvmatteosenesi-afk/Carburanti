@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261020-2';
+  const VERSION = '20261020-3';
   const NATIONAL_DATA_URL = `data/stations-it.json?v=${VERSION}`;
   const ITALY_CENTER = [42.5, 12.5];
 
@@ -94,7 +94,7 @@
 
   function setCurrentLocation(which) {
     const existing = window.CarburantiApp?.getUserPosition();
-    if (existing) {
+    if (existing && Number.isFinite(existing.lat) && Number.isFinite(existing.lon)) {
       const point = { lat: existing.lat, lon: existing.lon, label: 'Posizione attuale' };
       if (which === 'from') { trip.fromCoords = point; el.tripFrom.value = 'Posizione attuale'; }
       else { trip.toCoords = point; el.tripTo.value = 'Posizione attuale'; }
@@ -111,7 +111,11 @@
       if (which === 'from') { trip.fromCoords = point; el.tripFrom.value = 'Posizione attuale'; }
       else { trip.toCoords = point; el.tripTo.value = 'Posizione attuale'; }
       showMessage('Posizione acquisita.');
-    }, () => showMessage('Impossibile acquisire la posizione.'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 120000 });
+    }, err => {
+      if (err?.code === 1) showMessage('Posizione non autorizzata.');
+      else if (err?.code === 3) showMessage('Rilevamento posizione troppo lento. Riprova.');
+      else showMessage('Impossibile acquisire la posizione.');
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   }
 
   function resetCoordOnInput(which) {
@@ -231,13 +235,14 @@
     trip.stationLayer.clearLayers();
     const latLngs = route.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
     const line = L.polyline(latLngs, { color: '#1267d6', weight: 6, opacity: 0.88 }).addTo(trip.routeLayer);
-    trip.map.fitBounds(line.getBounds(), { padding: [22, 22], maxZoom: 13, animate: false });
 
     const fuel = window.CarburantiApp?.getFuel() || 'benzina';
     const prices = stations.map(s => Number(s.prices?.[fuel]?.price)).filter(Number.isFinite);
     const min = prices.length ? Math.min(...prices) : null;
 
+    const displayBounds = line.getBounds();
     for (const station of stations) {
+      if (Number.isFinite(station.lat) && Number.isFinite(station.lon)) displayBounds.extend([station.lat, station.lon]);
       const price = Number(station.prices?.[fuel]?.price);
       if (!Number.isFinite(price)) continue;
       const cls = priceClass(price, min);
@@ -254,6 +259,9 @@
         .bindPopup(popup, { maxWidth: 280 })
         .addTo(trip.stationLayer);
     }
+
+    trip.map.invalidateSize();
+    trip.map.fitBounds(displayBounds.pad(0.04), { padding: [28, 28], maxZoom: 14, animate: false });
 
     el.tripDistance.textContent = formatDistance(route.distance);
     el.tripDuration.textContent = formatDuration(route.duration);
