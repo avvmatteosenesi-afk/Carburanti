@@ -31,49 +31,71 @@
     });
   }
 
-  function installPriceMarkerActivation() {
-    const mapEl = document.getElementById('map');
-    if (!mapEl) return;
-    let lastActivationAt = 0;
-    const activate = ev => {
-      const target = ev.target instanceof Element ? ev.target : null;
-      const icon = target?.closest('.price-marker-wrap');
-      if (!icon || !mapEl.contains(icon)) return;
-      const now = Date.now();
-      if (now - lastActivationAt < 300) return;
-      const markerMap = window.CarburantiApp?.state?.markerById;
-      if (!(markerMap instanceof Map)) return;
-      let selected = null;
-      for (const marker of markerMap.values()) {
-        if (marker?._icon === icon) { selected = marker; break; }
-      }
-      if (!selected) return;
-      lastActivationAt = now;
-      ev.preventDefault();
-      ev.stopPropagation();
-      try { selected.openPopup(); } catch (_) {}
-      setTimeout(() => enhanceGoogleMapsLink(mapEl), 20);
+  /*
+   * Leaflet normally handles marker taps itself, but iOS/PWA can lose the click on
+   * DivIcon price labels after a map gesture. Attach a native activation handler to
+   * every Leaflet Marker when its icon is mounted. This covers both the home map and
+   * the Viaggio map and does not depend on the main-map marker registry.
+   */
+  function installLeafletMarkerActivation() {
+    if (!window.L?.Marker || L.Marker.prototype.__carburantiTapPatched) return;
+    const proto = L.Marker.prototype;
+    const originalOnAdd = proto.onAdd;
+    proto.onAdd = function(map) {
+      const result = originalOnAdd.call(this, map);
+      const marker = this;
+      const icon = marker._icon;
+      if (!icon || icon.__carburantiTapBound) return result;
+      icon.__carburantiTapBound = true;
+
+      const activate = ev => {
+        if (!icon.classList.contains('price-marker-wrap') || !marker.getPopup?.()) return;
+        const now = Date.now();
+        if (marker.__carburantiLastTap && now - marker.__carburantiLastTap < 350) return;
+        marker.__carburantiLastTap = now;
+        if (ev.type !== 'click') {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        try {
+          marker.openPopup();
+          setTimeout(() => enhanceGoogleMapsLink(document), 0);
+        } catch (_) {}
+      };
+
+      icon.addEventListener('pointerup', activate, true);
+      icon.addEventListener('touchend', activate, { capture: true, passive: false });
+      icon.addEventListener('click', activate, true);
+      icon.setAttribute('role', 'button');
+      icon.setAttribute('aria-label', 'Apri dettagli distributore e indicazioni');
+      return result;
     };
-    mapEl.addEventListener('pointerup', activate, true);
-    mapEl.addEventListener('click', activate, true);
-    window.CarburantiApp?.state?.map?.on('popupopen', () => enhanceGoogleMapsLink(mapEl));
+    proto.__carburantiTapPatched = true;
   }
 
-  function installAllPopupEnhancement() {
-    document.addEventListener('click', ev => {
-      const marker = ev.target instanceof Element ? ev.target.closest('.price-marker') : null;
-      if (marker) setTimeout(() => enhanceGoogleMapsLink(document), 20);
-    }, true);
+  function installPopupEnhancement() {
+    const attach = map => {
+      if (!map || map.__carburantiPopupEnhanced) return;
+      map.__carburantiPopupEnhanced = true;
+      map.on('popupopen', () => enhanceGoogleMapsLink(document));
+    };
+    attach(window.CarburantiApp?.state?.map);
+    const timer = setInterval(() => {
+      attach(window.CarburantiApp?.state?.map);
+      document.querySelectorAll('.leaflet-popup-content').forEach(() => enhanceGoogleMapsLink(document));
+    }, 500);
+    setTimeout(() => clearInterval(timer), 10000);
   }
 
   function enhanceHome() {
+    installLeafletMarkerActivation();
+
     const tripBtn = document.getElementById('tripOpenBtn');
-    const topbar = document.querySelector('.topbar');
     const topActions = document.querySelector('.top-actions');
     const mapCard = document.querySelector('.map-card');
     const stats = document.querySelector('.stats-grid');
     const locateBtn = document.getElementById('locateBtn');
-    if (tripBtn && topbar && topActions) {
+    if (tripBtn && topActions) {
       tripBtn.className = 'trip-top-btn';
       tripBtn.setAttribute('aria-label', 'Viaggio: cerca distributori lungo un percorso');
       tripBtn.title = 'Cerca distributori e prezzi lungo un percorso specifico';
@@ -90,8 +112,7 @@
       locateBtn.title = 'Verifica la posizione corrente e ricentra la mappa';
       locateBtn.addEventListener('click', ev => { ev.preventDefault(); ev.stopImmediatePropagation(); recenterCurrentPosition(); }, true);
     }
-    installPriceMarkerActivation();
-    installAllPopupEnhancement();
+    installPopupEnhancement();
     setTimeout(() => { try { window.CarburantiApp?.state?.map?.invalidateSize(false); } catch (_) {} }, 80);
   }
 
