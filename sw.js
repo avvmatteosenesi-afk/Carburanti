@@ -1,16 +1,16 @@
-const CACHE_VERSION = 'carburanti-shell-20261020-1';
+const CACHE_VERSION = 'carburanti-shell-20261020-2';
 const SHELL = [
   './',
   './index.html',
-  './style.css?v=20261020-1',
-  './app.js?v=20261020-1',
-  './trip.js?v=20261020-1',
-  './manifest.webmanifest?v=20261020-1',
-  './icon.svg?v=20261020-1',
-  './favicon.svg?v=20261020-1',
-  './icon-192.png?v=20261020-1',
-  './icon-512.png?v=20261020-1',
-  './apple-touch-icon.png?v=20261020-1'
+  './style.css?v=20261020-2',
+  './app.js?v=20261020-2',
+  './trip.js?v=20261020-2',
+  './manifest.webmanifest?v=20261020-2',
+  './icon.svg?v=20261020-2',
+  './favicon.svg?v=20261020-2',
+  './icon-192.png?v=20261020-2',
+  './icon-512.png?v=20261020-2',
+  './apple-touch-icon.png?v=20261020-2'
 ];
 
 self.addEventListener('install', event => {
@@ -31,7 +31,6 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // I dataset carburanti devono essere sempre freschi: niente cache persistente.
   if (url.pathname.endsWith('/data/stations.json') || url.pathname.endsWith('/data/stations-it.json')) {
     event.respondWith(fetch(req, { cache: 'no-store' }).catch(() => new Response(JSON.stringify({ metadata: {}, stations: [] }), {
       status: 503, headers: { 'Content-Type': 'application/json' }
@@ -39,7 +38,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // File dell'app: network-first, fallback alla cache.
   if (url.origin === self.location.origin) {
     event.respondWith((async () => {
       try {
