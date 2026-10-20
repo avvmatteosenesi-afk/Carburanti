@@ -1,11 +1,13 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261020-2';
+  const VERSION = '20261020-3';
   const DATA_URL = `data/stations.json?v=${VERSION}`;
   const PREFS_KEY = 'carburanti:prefs:v3';
+  const LAST_POSITION_KEY = 'carburanti:last-position:v1';
   const DEFAULT_ZONE = 'position';
   const LOCAL_RADIUS_KM = 10;
+  const LAST_POSITION_MAX_AGE = 24 * 60 * 60 * 1000;
   const TUSCANY_CENTER = [43.42, 11.10];
   const TUSCANY_BOUNDS = [[42.20, 9.72], [44.53, 12.22]];
 
@@ -41,6 +43,8 @@
     userPos: null,
     programmaticMove: false,
     loaded: false,
+    locating: false,
+    lastLocationAt: 0,
     lastVisibleStations: [],
     bestStation: null,
     markerById: new Map()
@@ -68,6 +72,25 @@
 
   function savePrefs(fuel, zone) {
     localStorage.setItem(PREFS_KEY, JSON.stringify({ fuel, zone }));
+  }
+
+  function saveLastPosition(pos) {
+    try {
+      localStorage.setItem(LAST_POSITION_KEY, JSON.stringify({ ...pos, savedAt: Date.now() }));
+    } catch {}
+  }
+
+  function restoreLastPosition() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LAST_POSITION_KEY) || 'null');
+      if (!saved || !Number.isFinite(saved.lat) || !Number.isFinite(saved.lon)) return false;
+      if (!Number.isFinite(saved.savedAt) || Date.now() - saved.savedAt > LAST_POSITION_MAX_AGE) return false;
+      state.userPos = { lat: saved.lat, lon: saved.lon, accuracy: saved.accuracy || null, provisional: true };
+      state.lastLocationAt = saved.savedAt;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function haversineKm(aLat, aLon, bLat, bLon) {
@@ -120,16 +143,17 @@
     const center = state.map.getCenter();
     let outside = false;
 
-    if (state.zone === 'position' && state.userPos) {
-      outside = haversineKm(center.lat, center.lng, state.userPos.lat, state.userPos.lon) > LOCAL_RADIUS_KM;
+    if (state.zone === 'position') {
+      if (!state.userPos) return;
+      outside = haversineKm(center.lat, center.lng, state.userPos.lat, state.userPos.lon) > LOCAL_RADIUS_KM + 1;
     } else if (state.zone === 'tuscany') {
       outside = !L.latLngBounds(TUSCANY_BOUNDS).contains(center);
     } else if (state.zone.startsWith('province:')) {
       const p = PROVINCES[state.zone.split(':')[1]];
-      outside = p ? !L.latLngBounds(p.bounds).contains(center) : false;
+      outside = p ? !L.latLngBounds(p.bounds).pad(0.12).contains(center) : false;
     } else if (state.zone.startsWith('quick:')) {
       const q = QUICK_ZONES[state.zone.split(':')[1]];
-      outside = q ? !L.latLngBounds(q.bounds).contains(center) : false;
+      outside = q ? !L.latLngBounds(q.bounds).pad(0.18).contains(center) : false;
     }
 
     if (outside) {
@@ -182,7 +206,8 @@
   function zoneStations() {
     const withFuel = state.stations.filter(s => stationHasFuel(s));
 
-    if (state.zone === 'position' && state.userPos) {
+    if (state.zone === 'position') {
+      if (!state.userPos) return [];
       return withFuel.filter(s => haversineKm(state.userPos.lat, state.userPos.lon, s.lat, s.lon) <= LOCAL_RADIUS_KM);
     }
     if (state.zone.startsWith('province:')) {
@@ -198,7 +223,11 @@
       const b = state.map.getBounds().pad(0.04);
       return withFuel.filter(s => b.contains([s.lat, s.lon]));
     }
-    return withFuel.filter(s => L.latLngBounds(TUSCANY_BOUNDS).contains([s.lat, s.lon]));
+    if (state.zone === 'tuscany') {
+      const b = L.latLngBounds(TUSCANY_BOUNDS);
+      return withFuel.filter(s => b.contains([s.lat, s.lon]));
+    }
+    return [];
   }
 
   function renderStations() {
@@ -279,15 +308,43 @@
     renderStations();
   }
 
-  function mapFitBounds(bounds, maxZoom = 12, padding = [18, 18]) {
+  function mapFitBounds(bounds, maxZoom = 12, padding = [24, 24]) {
     state.programmaticMove = true;
     state.map.fitBounds(bounds, { padding, maxZoom, animate: false });
+  }
+
+  function stationsForGeographicZone(zone) {
+    if (zone === 'tuscany') {
+      const b = L.latLngBounds(TUSCANY_BOUNDS);
+      return state.stations.filter(s => b.contains([s.lat, s.lon]));
+    }
+    if (zone.startsWith('province:')) {
+      const code = zone.split(':')[1];
+      return state.stations.filter(s => s.province === code);
+    }
+    if (zone.startsWith('quick:')) {
+      const q = QUICK_ZONES[zone.split(':')[1]];
+      if (!q) return [];
+      const b = L.latLngBounds(q.bounds);
+      return state.stations.filter(s => b.contains([s.lat, s.lon]));
+    }
+    return [];
+  }
+
+  function fitStationZone(zone, fallbackBounds, maxZoom) {
+    const stations = stationsForGeographicZone(zone).filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon));
+    if (stations.length >= 2) {
+      const bounds = L.latLngBounds(stations.map(s => [s.lat, s.lon])).pad(0.08);
+      mapFitBounds(bounds, maxZoom, [26, 26]);
+    } else {
+      mapFitBounds(fallbackBounds, maxZoom, [26, 26]);
+    }
   }
 
   function fitLocalRadius() {
     if (!state.userPos) return;
     const bounds = L.circle([state.userPos.lat, state.userPos.lon], { radius: LOCAL_RADIUS_KM * 1000 }).getBounds();
-    mapFitBounds(bounds, 12, [24, 24]);
+    mapFitBounds(bounds, 13, [28, 28]);
   }
 
   function setZone(zone, { requestLocation = true } = {}) {
@@ -296,25 +353,31 @@
     el.freeModeBadge.classList.toggle('hidden', zone !== 'free');
 
     if (zone === 'position') {
-      if (state.userPos) {
+      if (!state.userPos && restoreLastPosition()) {
+        drawUserLocation();
         fitLocalRadius();
         renderStations();
-      } else if (requestLocation) {
-        locateUser(true);
+        showMapNotice('Ultima posizione disponibile · aggiornamento GPS…', 5000);
+      } else if (state.userPos) {
+        fitLocalRadius();
+        renderStations();
+      } else {
+        renderStations();
       }
+      if (requestLocation) locateUser(true, { quiet: Boolean(state.userPos) });
       return;
     }
 
     if (zone === 'tuscany') {
-      mapFitBounds(TUSCANY_BOUNDS, 9);
+      fitStationZone(zone, TUSCANY_BOUNDS, 9);
     } else if (zone === 'free') {
       renderStations();
     } else if (zone.startsWith('province:')) {
       const p = PROVINCES[zone.split(':')[1]];
-      if (p) mapFitBounds(p.bounds, p.maxZoom);
+      if (p) fitStationZone(zone, p.bounds, p.maxZoom);
     } else if (zone.startsWith('quick:')) {
       const q = QUICK_ZONES[zone.split(':')[1]];
-      if (q) mapFitBounds(q.bounds, q.maxZoom);
+      if (q) fitStationZone(zone, q.bounds, q.maxZoom);
     }
   }
 
@@ -323,35 +386,64 @@
     if (!state.userPos) return;
     const icon = L.divIcon({ className: '', html: '<div class="user-location"></div>', iconSize: [24, 24], iconAnchor: [12, 12] });
     L.marker([state.userPos.lat, state.userPos.lon], { pane: 'userPane', icon, zIndexOffset: 10000 })
-      .bindPopup('La tua posizione')
+      .bindPopup(state.userPos.provisional ? 'Ultima posizione disponibile' : 'La tua posizione')
       .addTo(state.userLayer);
     L.circle([state.userPos.lat, state.userPos.lon], {
-      pane: 'userPane', radius: LOCAL_RADIUS_KM * 1000, interactive: false, weight: 1, opacity: 0.35, fillOpacity: 0.025
+      pane: 'userPane', radius: LOCAL_RADIUS_KM * 1000, interactive: false, weight: 1, opacity: 0.38, fillOpacity: 0.025
     }).addTo(state.userLayer);
   }
 
-  function locateUser(centerAfter = true) {
+  function geolocationErrorMessage(err) {
+    if (err && err.code === 1) return 'Posizione non autorizzata: abilitala per usare “Mia zona · 10 km”';
+    if (err && err.code === 2) return 'Posizione non disponibile: verifica GPS/rete e riprova';
+    if (err && err.code === 3) return 'Rilevamento posizione troppo lento: tocca “Posizione” per riprovare';
+    return 'Impossibile rilevare la posizione';
+  }
+
+  function locateUser(centerAfter = true, { quiet = false } = {}) {
     if (!navigator.geolocation) {
-      showMapNotice('Geolocalizzazione non disponibile su questo dispositivo');
+      showMapNotice('Geolocalizzazione non disponibile su questo dispositivo', 5000);
       return;
     }
-    showMapNotice('Rilevamento posizione…', 5000);
+    if (state.locating) return;
+    state.locating = true;
+    if (!quiet) showMapNotice('Rilevamento posizione…', 12000);
+
     navigator.geolocation.getCurrentPosition(pos => {
-      state.userPos = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
+      state.locating = false;
+      state.lastLocationAt = Date.now();
+      state.userPos = {
+        lat: pos.coords.latitude,
+        lon: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+        provisional: false
+      };
+      saveLastPosition(state.userPos);
       drawUserLocation();
-      if (centerAfter) {
-        state.zone = 'position';
+      if (centerAfter && state.zone === 'position') {
         el.zoneSelect.value = 'position';
         el.freeModeBadge.classList.add('hidden');
         fitLocalRadius();
       }
       renderStations();
-      showMapNotice('Mia zona · 10 km');
+      showMapNotice(`Mia zona · 10 km${Number.isFinite(pos.coords.accuracy) ? ` · precisione ±${Math.round(pos.coords.accuracy)} m` : ''}`, 3500);
       window.dispatchEvent(new CustomEvent('carburanti:location', { detail: state.userPos }));
     }, err => {
-      showMapNotice(err.code === 1 ? 'Permesso posizione non concesso' : 'Impossibile rilevare la posizione');
-      if (state.zone === 'position') setZone('tuscany', { requestLocation: false });
-    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 120000 });
+      state.locating = false;
+      if (state.zone === 'position') {
+        if (state.userPos) {
+          drawUserLocation();
+          fitLocalRadius();
+          renderStations();
+          showMapNotice(`${geolocationErrorMessage(err)} · uso ultima posizione`, 6000);
+        } else {
+          renderStations();
+          showMapNotice(geolocationErrorMessage(err), 7000);
+        }
+      } else {
+        showMapNotice(geolocationErrorMessage(err), 5000);
+      }
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   }
 
   function bindUi() {
@@ -378,6 +470,12 @@
       setZone(el.defaultZoneSelect.value);
       renderStations();
       showMapNotice('Impostazioni salvate');
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && state.zone === 'position' && Date.now() - state.lastLocationAt > 120000) {
+        locateUser(false, { quiet: true });
+      }
     });
   }
 
