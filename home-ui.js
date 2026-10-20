@@ -33,38 +33,37 @@
       notice.classList.remove('hidden');
     }
 
-    // Poi richiede una posizione nuova al telefono e ricentra di nuovo sul risultato.
+    // Questo tap è esplicito: forza un nuovo rilevamento GPS, senza usare la cache iniziale.
+    window.__carburantiForceFreshGeo = true;
     try {
       app?.locateUser?.(true);
-    } catch (_) {}
+    } catch (_) {
+      window.__carburantiForceFreshGeo = false;
+    }
   }
 
   function enhanceHome() {
     const tripBtn = document.getElementById('tripOpenBtn');
     const topbar = document.querySelector('.topbar');
-    const controls = document.querySelector('.controls-card');
+    const topActions = document.querySelector('.top-actions');
     const mapCard = document.querySelector('.map-card');
     const stats = document.querySelector('.stats-grid');
     const locateBtn = document.getElementById('locateBtn');
 
-    if (tripBtn && topbar && controls) {
-      tripBtn.className = 'trip-cta';
+    if (tripBtn && topbar && topActions) {
+      tripBtn.className = 'trip-top-btn';
       tripBtn.setAttribute('aria-label', 'Viaggio: cerca distributori lungo un percorso');
       tripBtn.title = 'Cerca distributori e prezzi lungo un percorso specifico';
       tripBtn.innerHTML = `
-        <span class="trip-cta-icon" aria-hidden="true">↗</span>
-        <span class="trip-cta-copy">
-          <strong>Viaggio</strong>
-          <small>Cerca distributori e prezzi lungo un percorso specifico</small>
-        </span>
-        <span class="trip-cta-arrow" aria-hidden="true">›</span>`;
-      topbar.insertAdjacentElement('afterend', tripBtn);
+        <span class="trip-top-icon" aria-hidden="true">↗</span>
+        <span class="trip-top-copy"><strong>Viaggio</strong><small>Percorso</small></span>`;
+      if (tripBtn.parentElement !== topActions) topActions.insertBefore(tripBtn, topActions.firstChild);
     }
 
     if (stats && mapCard) {
       stats.classList.remove('bottom-stats');
       stats.classList.add('map-stats');
-      mapCard.appendChild(stats);
+      if (stats.parentElement !== mapCard) mapCard.appendChild(stats);
     }
 
     if (locateBtn) {
@@ -78,7 +77,6 @@
       }, true);
     }
 
-    // Leaflet può aver calcolato la dimensione prima dello spostamento degli elementi.
     setTimeout(() => {
       try { window.CarburantiApp?.state?.map?.invalidateSize(false); } catch (_) {}
     }, 80);
