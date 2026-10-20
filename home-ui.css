@@ -20,8 +20,6 @@
 .trip-top-copy small { margin-top: 2px; font-size: .57rem; color: rgba(255,255,255,.82); }
 .top-actions { flex: 0 0 auto; align-items: center; }
 
-/* Se il permesso era già stato concesso, un eventuale pannello transitorio resta invisibile.
-   Se serve davvero l'intervento dell'utente, appare solo dopo un breve controllo. */
 .geo-consent-backdrop:not(.hidden) { animation: geoConsentDeferred .01s linear .9s both; }
 @keyframes geoConsentDeferred {
   from { opacity: 0; visibility: hidden; }
@@ -53,6 +51,28 @@
   border-color: rgba(183,224,198,.96);
 }
 
+/* I prezzi sulla mappa devono essere chiaramente interattivi. */
+.price-marker-wrap,
+.price-marker-wrap .price-marker {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  touch-action: manipulation;
+}
+.price-marker-wrap:active .price-marker { transform: scale(.96); }
+.google-maps-btn {
+  display: block;
+  margin-top: 9px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: #0d6efd;
+  color: #fff !important;
+  font-weight: 800;
+  text-decoration: none !important;
+  text-align: center;
+  line-height: 1.15;
+}
+.google-maps-btn:active { transform: scale(.985); }
+
 @media (max-width: 700px) {
   .topbar { min-height: 54px; }
   .brand-wrap { gap: 7px; min-width: 0; }
@@ -78,7 +98,6 @@
   .small-btn::first-letter { font-size: inherit !important; }
   .legend { line-height: 1; }
 
-  /* Mappa full-bleed: arriva ai margini reali dello schermo. */
   .map-card {
     width: calc(100% + 10px);
     margin-left: -5px;
@@ -91,8 +110,8 @@
   }
   #map {
     width: 100%;
-    height: clamp(330px, calc(100dvh - 245px), 620px);
-    min-height: 330px;
+    height: clamp(390px, calc(100dvh - 215px), 720px);
+    min-height: 390px;
     border-radius: 0;
   }
   .map-stats { left: 7px; right: 7px; bottom: 7px; gap: 5px; }
@@ -106,6 +125,6 @@
   .brand-wrap .subtle { max-width: 118px; }
   .trip-top-copy small { display: none; }
   .trip-top-btn { grid-template-columns: 18px auto; }
-  #map { height: clamp(320px, calc(100dvh - 235px), 570px); min-height: 320px; }
+  #map { height: clamp(370px, calc(100dvh - 205px), 660px); min-height: 370px; }
   .map-stats .stat-detail { display: none; }
 }
