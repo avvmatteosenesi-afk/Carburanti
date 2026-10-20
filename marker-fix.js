@@ -1,53 +1,42 @@
 (() => {
   'use strict';
 
-  function openPriceMarker(target, ev) {
+  function markerForIcon(icon) {
+    if (!icon || !window.L) return null;
+    const leafletId = icon._leaflet_id || L.Util.stamp(icon);
+    const homeMap = window.CarburantiApp?.state?.map;
+    const tripMap = window.CarburantiTrip?.map;
+    return homeMap?._targets?.[leafletId] || tripMap?._targets?.[leafletId] || null;
+  }
+
+  function activate(target, ev) {
     const icon = target?.closest?.('.price-marker-wrap');
-    if (!icon) return false;
-    const markerId = icon.dataset.stationId;
-    const app = window.CarburantiApp;
-    const marker = markerId && app?.state?.markerById?.get?.(String(markerId));
-    if (!marker) return false;
+    if (!icon) return;
+    const marker = markerForIcon(icon);
+    if (!marker?.getPopup?.()) return;
+    const now = Date.now();
+    if (marker.__carburantiTapAt && now - marker.__carburantiTapAt < 300) return;
+    marker.__carburantiTapAt = now;
     if (ev?.cancelable) ev.preventDefault();
     ev?.stopPropagation?.();
-    try { marker.openPopup(); } catch (_) { return false; }
-    return true;
+    try { marker.openPopup(); } catch (_) {}
   }
 
-  function bindDelegation() {
-    const map = document.getElementById('map');
-    if (!map || map.__carburantiDelegatedTap) return;
-    map.__carburantiDelegatedTap = true;
-    const handler = ev => openPriceMarker(ev.target, ev);
-    map.addEventListener('click', handler, true);
-    map.addEventListener('pointerup', handler, true);
-    map.addEventListener('touchend', handler, { capture: true, passive: false });
+  function bind(container) {
+    if (!container || container.__carburantiDelegatedTap) return;
+    container.__carburantiDelegatedTap = true;
+    const handler = ev => activate(ev.target, ev);
+    container.addEventListener('pointerup', handler, true);
+    container.addEventListener('touchend', handler, { capture: true, passive: false });
+    container.addEventListener('click', handler, true);
   }
 
-  function patchDivIcon() {
-    if (!window.L?.Marker || L.Marker.prototype.__carburantiStationIdPatch) return;
-    const proto = L.Marker.prototype;
-    const originalOnAdd = proto.onAdd;
-    proto.onAdd = function(map) {
-      const result = originalOnAdd.call(this, map);
-      const icon = this._icon;
-      if (icon && (icon.classList.contains('price-marker-wrap') || icon.querySelector('.price-marker'))) {
-        const app = window.CarburantiApp;
-        const entries = app?.state?.markerById;
-        if (entries) {
-          for (const [id, marker] of entries.entries()) {
-            if (marker === this) { icon.dataset.stationId = id; break; }
-          }
-        }
-        icon.style.pointerEvents = 'auto';
-        icon.style.touchAction = 'manipulation';
-      }
-      return result;
-    };
-    proto.__carburantiStationIdPatch = true;
+  function bindAll() {
+    bind(document.getElementById('map'));
+    bind(document.getElementById('tripMap'));
   }
 
-  patchDivIcon();
-  document.addEventListener('DOMContentLoaded', bindDelegation);
-  window.addEventListener('load', bindDelegation);
+  document.addEventListener('DOMContentLoaded', bindAll);
+  window.addEventListener('load', bindAll);
+  setTimeout(bindAll, 1000);
 })();
