@@ -1,6 +1,75 @@
 (() => {
   'use strict';
 
+  const markerRegistry = new Map();
+  let sequence = 0;
+
+  function registerMarker(marker) {
+    const icon = marker?.getElement?.() || marker?._icon;
+    if (!icon || !icon.classList?.contains('price-marker-wrap') || !marker.getPopup?.()) return;
+    let id = icon.dataset.carburantiMarkerId;
+    if (!id) {
+      id = `fuel-${++sequence}`;
+      icon.dataset.carburantiMarkerId = id;
+    }
+    markerRegistry.set(id, marker);
+    icon.style.pointerEvents = 'auto';
+    icon.style.touchAction = 'manipulation';
+    icon.style.cursor = 'pointer';
+    icon.setAttribute('role', 'button');
+    icon.setAttribute('tabindex', '0');
+  }
+
+  function markerFromTarget(target) {
+    const icon = target?.closest?.('.price-marker-wrap');
+    if (!icon) return null;
+    return markerRegistry.get(icon.dataset.carburantiMarkerId) || null;
+  }
+
+  function activate(ev) {
+    const marker = markerFromTarget(ev.target);
+    if (!marker) return;
+    if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+    const now = Date.now();
+    if (marker.__carburantiOpenedAt && now - marker.__carburantiOpenedAt < 350) return;
+    marker.__carburantiOpenedAt = now;
+    if (ev.cancelable) ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation?.();
+    try { marker.openPopup(); } catch (_) {}
+  }
+
+  function installActivation() {
+    if (document.__carburantiActivationV10) return;
+    document.__carburantiActivationV10 = true;
+    // Use the beginning of the gesture. Leaflet/iOS may consume the later click
+    // when it thinks the finger movement belongs to the map.
+    document.addEventListener('pointerdown', activate, true);
+    document.addEventListener('touchstart', activate, { capture: true, passive: false });
+    document.addEventListener('click', activate, true);
+    document.addEventListener('keydown', activate, true);
+  }
+
+  function installRegistration() {
+    if (!window.L?.Marker) return;
+    const proto = L.Marker.prototype;
+    if (proto.__carburantiRegistrationV10) return;
+    const originalOnAdd = proto.onAdd;
+    const originalOnRemove = proto.onRemove;
+    proto.onAdd = function(map) {
+      const result = originalOnAdd.call(this, map);
+      registerMarker(this);
+      return result;
+    };
+    proto.onRemove = function(map) {
+      const icon = this.getElement?.() || this._icon;
+      const id = icon?.dataset?.carburantiMarkerId;
+      if (id) markerRegistry.delete(id);
+      return originalOnRemove.call(this, map);
+    };
+    proto.__carburantiRegistrationV10 = true;
+  }
+
   function parsePrice(text) {
     const n = Number(String(text || '').replace(',', '.').replace(/[^0-9.]/g, ''));
     return Number.isFinite(n) ? n : null;
@@ -20,46 +89,13 @@
       const cls = d <= 0.0005 ? 'best' : d <= nearLimit ? 'near' : d <= goodLimit ? 'good' : 'normal';
       ['best','near','good','normal'].forEach(c => el.classList.toggle(c, c === cls));
     });
+    const spans = document.querySelectorAll('.controls-card .legend span');
+    if (spans[1]) spans[1].lastChild.textContent = wide ? ' entro 10 cent' : ' entro 5 cent';
+    if (spans[2]) spans[2].lastChild.textContent = wide ? ' entro 20 cent' : ' entro 10 cent';
   }
 
-  // Leaflet divIcon wrappers are the actual interactive elements. Make the whole
-  // rendered price label the hit target and open the marker popup directly.
-  function bindMarker(marker) {
-    const icon = marker?.getElement?.() || marker?._icon;
-    if (!icon || !marker.getPopup?.() || icon.__carburantiTapV9) return;
-    icon.__carburantiTapV9 = true;
-    icon.__carburantiMarker = marker;
-    icon.style.pointerEvents = 'auto';
-    icon.style.touchAction = 'manipulation';
-    icon.style.cursor = 'pointer';
-    icon.setAttribute('role', 'button');
-    icon.setAttribute('tabindex', '0');
-
-    const open = ev => {
-      if (ev?.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
-      if (ev?.cancelable) ev.preventDefault();
-      ev?.stopPropagation?.();
-      marker.openPopup();
-    };
-    icon.addEventListener('click', open, false);
-    icon.addEventListener('keydown', open, false);
-  }
-
-  if (window.L?.Marker) {
-    const proto = L.Marker.prototype;
-    if (!proto.__carburantiTapPatchV9) {
-      const originalOnAdd = proto.onAdd;
-      proto.onAdd = function(map) {
-        const result = originalOnAdd.call(this, map);
-        if ((this.getElement?.() || this._icon)?.classList?.contains('price-marker-wrap')) {
-          requestAnimationFrame(() => bindMarker(this));
-        }
-        return result;
-      };
-      proto.__carburantiTapPatchV9 = true;
-    }
-  }
-
+  installActivation();
+  installRegistration();
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(recolorHomeMarkers, 50));
     const best = document.getElementById('bestPrice');
