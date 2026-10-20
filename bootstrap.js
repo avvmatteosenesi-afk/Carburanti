@@ -1,26 +1,40 @@
 (() => {
   'use strict';
 
-  const GEO_CONSENT_KEY = 'carburanti:geo-consent:v2';
+  const VERSION = '20261020-6';
+  const GEO_CONSENT_KEY = 'carburanti:geo-consent:v3';
   const LAST_POSITION_KEY = 'carburanti:last-position:v1';
+  const RAW_BASE = 'https://raw.githubusercontent.com/avvmatteosenesi-afk/Carburanti/main/data/';
+  const LOCAL_RADIUS_KM = 10;
+  const nativeFetch = window.fetch.bind(window);
+
+  // Fallback dei dataset: se GitHub Pages non risponde, prova il file raw del repository.
+  window.fetch = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const match = url.match(/data\/(stations(?:-it)?\.json)(?:\?|$)/);
+    if (!match || url.startsWith(RAW_BASE)) return nativeFetch(input, init);
+    try {
+      const response = await nativeFetch(input, { ...init, cache: 'no-store' });
+      if (response.ok) return response;
+    } catch (_) {}
+    return nativeFetch(`${RAW_BASE}${match[1]}?v=${VERSION}-${Date.now()}`, { ...init, cache: 'no-store' });
+  };
+
   let nativeGeo = null;
   let geoArmed = false;
   let pendingGeo = null;
-  let interceptionActive = false;
 
   try {
     if (navigator.geolocation && typeof navigator.geolocation.getCurrentPosition === 'function') {
       nativeGeo = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
-      const queuedGetCurrentPosition = (success, error, options) => {
+      navigator.geolocation.getCurrentPosition = (success, error, options) => {
         const req = { success, error, options };
         if (!geoArmed) {
           pendingGeo = req;
           return;
         }
-        return invokeNative(req);
+        requestNative(req);
       };
-      navigator.geolocation.getCurrentPosition = queuedGetCurrentPosition;
-      interceptionActive = navigator.geolocation.getCurrentPosition === queuedGetCurrentPosition;
     }
   } catch (_) {
     nativeGeo = navigator.geolocation?.getCurrentPosition?.bind(navigator.geolocation) || null;
@@ -121,44 +135,76 @@
     return 'Non riesco a ottenere la posizione. Tocca “Riprova”.';
   }
 
-  function applyPosition(pos, updateApp = false) {
+  function localBounds(lat, lon) {
+    const latDelta = LOCAL_RADIUS_KM / 111.32;
+    const cosLat = Math.max(0.2, Math.cos(lat * Math.PI / 180));
+    const lonDelta = LOCAL_RADIUS_KM / (111.32 * cosLat);
+    return [[lat - latDelta, lon - lonDelta], [lat + latDelta, lon + lonDelta]];
+  }
+
+  function forceLocalView(posLike) {
+    const app = window.CarburantiApp;
+    const state = app?.state;
+    const map = state?.map;
+    const lat = Number(posLike?.lat ?? posLike?.coords?.latitude ?? state?.userPos?.lat);
+    const lon = Number(posLike?.lon ?? posLike?.coords?.longitude ?? state?.userPos?.lon);
+    if (!map || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+    state.userPos = {
+      lat,
+      lon,
+      accuracy: Number(posLike?.accuracy ?? posLike?.coords?.accuracy ?? state.userPos?.accuracy) || null,
+      provisional: false
+    };
+    state.zone = 'position';
+    state.locating = false;
+    state.programmaticMove = true;
+
+    const zone = document.getElementById('zoneSelect');
+    if (zone) zone.value = 'position';
+    document.getElementById('freeModeBadge')?.classList.add('hidden');
+
+    try {
+      map.invalidateSize(false);
+      map.fitBounds(localBounds(lat, lon), { padding: [28, 28], maxZoom: 13, animate: false });
+    } catch (_) {
+      try { map.setView([lat, lon], 12, { animate: false }); } catch (_) {}
+    }
+
+    // Un movimento della mappa richiama il rendering. Il click sul carburante attivo
+    // è un secondo trigger intenzionale, utile anche se il moveend è già avvenuto.
+    setTimeout(() => {
+      try { document.querySelector('.fuel-tab.active')?.click(); } catch (_) {}
+      setWait('', false);
+      closePrompt();
+      const notice = document.getElementById('mapNotice');
+      if (notice) {
+        notice.textContent = 'Mia zona · 10 km';
+        notice.classList.remove('hidden');
+        setTimeout(() => notice.classList.add('hidden'), 2200);
+      }
+    }, 60);
+  }
+
+  function applyPosition(pos) {
     rememberConsent();
     savePosition(pos);
     closePrompt();
-    setWait('', false);
-
-    if (!updateApp) return;
-    const app = window.CarburantiApp;
-    if (app?.state) {
-      app.state.userPos = {
-        lat: pos.coords.latitude,
-        lon: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-        provisional: false
-      };
-      app.state.locating = false;
-    }
-
-    const zone = document.getElementById('zoneSelect');
-    if (zone) {
-      zone.value = 'position';
-      zone.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    forceLocalView(pos);
+    setTimeout(() => forceLocalView(pos), 300);
   }
 
-  function invokeNative(req) {
+  function requestNative(req = {}) {
     if (!nativeGeo) {
       showPrompt('La geolocalizzazione non è disponibile su questo dispositivo.', 'Riprova');
       return;
     }
-
-    const options = { enableHighAccuracy: true, timeout: 30000, maximumAge: 0, ...(req?.options || {}) };
+    const options = { enableHighAccuracy: true, timeout: 30000, maximumAge: 0, ...(req.options || {}) };
     nativeGeo(pos => {
-      const hasAppCallback = typeof req?.success === 'function';
-      try { req?.success?.(pos); } catch (_) {}
-      applyPosition(pos, !hasAppCallback);
+      try { req.success?.(pos); } catch (_) {}
+      applyPosition(pos);
     }, err => {
-      try { req?.error?.(err); } catch (_) {}
+      try { req.error?.(err); } catch (_) {}
       if (window.CarburantiApp?.state) window.CarburantiApp.state.locating = false;
       showPrompt(permissionMessage(err), 'Riprova');
       setWait('Posizione necessaria per mostrare i distributori entro 10 km', true);
@@ -179,13 +225,9 @@
     if (pendingGeo) {
       const req = pendingGeo;
       pendingGeo = null;
-      invokeNative(req);
+      requestNative(req);
     } else {
-      invokeNative({
-        success: () => {},
-        error: () => {},
-        options: { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
-      });
+      requestNative();
     }
   }
 
@@ -204,13 +246,15 @@
     const zone = document.getElementById('zoneSelect');
     if (!zone || zone.value !== 'position') return;
 
-    const state = await permissionState();
-    if (window.CarburantiApp?.getUserPosition?.()) {
+    const current = window.CarburantiApp?.getUserPosition?.();
+    if (current && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {
       rememberConsent();
       closePrompt();
-      setWait('', false);
+      forceLocalView(current);
       return;
     }
+
+    const state = await permissionState();
     if (state === 'granted') {
       geoArmed = true;
       closePrompt();
@@ -218,22 +262,21 @@
       if (pendingGeo) {
         const req = pendingGeo;
         pendingGeo = null;
-        invokeNative(req);
+        requestNative(req);
+      } else {
+        requestNative();
       }
       return;
     }
-
     if (state === 'denied') {
       showPrompt('La posizione risulta bloccata. Abilitala nelle impostazioni del browser o del telefono, poi tocca “Riprova”.', 'Riprova');
       return;
     }
-
     showPrompt('Per mostrarti i distributori entro 10 km, consenti a Carburanti di usare la tua posizione.');
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     buildUi();
-
     const allow = document.getElementById('geoConsentAllow');
     const skip = document.getElementById('geoConsentSkip');
     const zone = document.getElementById('zoneSelect');
@@ -242,9 +285,6 @@
     skip?.addEventListener('click', () => {
       closePrompt();
       setWait('', false);
-      if (pendingGeo?.error) {
-        try { pendingGeo.error({ code: 1, message: 'Autorizzazione rinviata' }); } catch (_) {}
-      }
       pendingGeo = null;
       if (window.CarburantiApp?.state) window.CarburantiApp.state.locating = false;
       if (zone) {
@@ -254,8 +294,10 @@
     });
 
     zone?.addEventListener('change', () => {
-      if (zone.value === 'position' && !window.CarburantiApp?.getUserPosition?.()) {
-        prepareGeo();
+      if (zone.value === 'position') {
+        const current = window.CarburantiApp?.getUserPosition?.();
+        if (current) setTimeout(() => forceLocalView(current), 0);
+        else prepareGeo();
       } else {
         closePrompt();
         setWait('', false);
@@ -264,24 +306,19 @@
 
     prepareGeo();
 
-    let positionChecks = 0;
-    const positionTimer = setInterval(() => {
-      positionChecks += 1;
-      if (window.CarburantiApp?.getUserPosition?.()) {
-        rememberConsent();
-        closePrompt();
-        setWait('', false);
-        clearInterval(positionTimer);
-      } else if (positionChecks >= 60) {
-        clearInterval(positionTimer);
+    // Rescue per iOS/PWA: se l'app ha già ricevuto le coordinate ma il codice principale
+    // si è interrotto durante lo zoom, forza comunque vista locale e rendering.
+    let checks = 0;
+    const timer = setInterval(() => {
+      checks += 1;
+      const current = window.CarburantiApp?.getUserPosition?.();
+      const currentZone = document.getElementById('zoneSelect')?.value;
+      if (currentZone === 'position' && current && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {
+        forceLocalView(current);
+        clearInterval(timer);
+      } else if (checks >= 80) {
+        clearInterval(timer);
       }
-    }, 500);
-
-    if (!interceptionActive && zone?.value === 'position') {
-      // On browsers where the Geolocation method cannot be wrapped, the explicit
-      // button still performs the native request. The overlay prevents a misleading
-      // empty map while authorization is pending.
-      setWait('Autorizza la posizione per vedere i distributori entro 10 km', true);
-    }
+    }, 250);
   });
 })();
