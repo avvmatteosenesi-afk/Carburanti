@@ -1,4 +1,5 @@
-const CACHE_VERSION = 'carburanti-shell-20261020-4';
+const CACHE_VERSION = 'carburanti-shell-20261020-5';
+const DATA_CACHE = 'carburanti-data-v1';
 const SHELL = [
   './',
   './index.html',
@@ -22,7 +23,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k !== CACHE_VERSION && k !== `${CACHE_VERSION}-data`).map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => k !== CACHE_VERSION && k !== DATA_CACHE).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -34,13 +35,19 @@ self.addEventListener('fetch', event => {
 
   if (url.pathname.endsWith('/data/stations.json') || url.pathname.endsWith('/data/stations-it.json')) {
     event.respondWith((async () => {
-      const cache = await caches.open(`${CACHE_VERSION}-data`);
+      const cache = await caches.open(DATA_CACHE);
+      const cacheKey = new Request(`${url.origin}${url.pathname}`);
       try {
         const fresh = await fetch(req, { cache: 'no-store' });
-        if (fresh.ok) cache.put(req, fresh.clone()).catch(() => {});
+        if (fresh.ok) {
+          cache.put(cacheKey, fresh.clone()).catch(() => {});
+          return fresh;
+        }
+        const cached = await cache.match(cacheKey);
+        if (cached) return cached;
         return fresh;
       } catch {
-        const cached = await cache.match(req);
+        const cached = await cache.match(cacheKey);
         if (cached) return cached;
         return new Response(JSON.stringify({ metadata: {}, stations: [] }), {
           status: 503,
