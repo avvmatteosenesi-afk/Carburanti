@@ -22,69 +22,14 @@
     });
   }
 
-  function markerFromIcon(icon) {
-    return icon?.__carburantiMarker || null;
-  }
-
-  function activate(icon, ev) {
-    const marker = markerFromIcon(icon);
-    if (!marker?.getPopup?.()) return;
-    if (ev?.cancelable) ev.preventDefault();
-    ev?.stopPropagation?.();
-    marker.openPopup();
-  }
-
-  if (window.L?.Marker) {
-    const proto = L.Marker.prototype;
-    if (!proto.__carburantiDirectPopupV7) {
-      const originalOnAdd = proto.onAdd;
-      proto.onAdd = function(map) {
-        const result = originalOnAdd.call(this, map);
-        const icon = this.getElement?.() || this._icon;
-        if (!icon?.classList?.contains('price-marker-wrap') || !this.getPopup?.()) return result;
-
-        icon.__carburantiMarker = this;
-        icon.style.pointerEvents = 'auto';
-        icon.style.touchAction = 'manipulation';
-        icon.style.cursor = 'pointer';
-        icon.setAttribute('role', 'button');
-        icon.setAttribute('tabindex', '0');
-        icon.setAttribute('aria-label', `Prezzo carburante ${icon.textContent?.trim() || ''}. Apri dettagli distributore`);
-
-        // Bind directly to every Leaflet marker. This avoids ambiguous hit-testing
-        // when price labels overlap: the visually topmost marker receives the tap.
-        if (!icon.__carburantiBoundV7) {
-          icon.__carburantiBoundV7 = true;
-          let touchHandledAt = 0;
-          icon.addEventListener('touchend', ev => {
-            touchHandledAt = Date.now();
-            activate(icon, ev);
-          }, { passive: false });
-          icon.addEventListener('pointerup', ev => {
-            if (ev.pointerType === 'touch') return;
-            activate(icon, ev);
-          }, { passive: false });
-          icon.addEventListener('click', ev => {
-            if (Date.now() - touchHandledAt < 600) {
-              ev.preventDefault(); ev.stopPropagation(); return;
-            }
-            activate(icon, ev);
-          }, false);
-          icon.addEventListener('keydown', ev => {
-            if (ev.key === 'Enter' || ev.key === ' ') activate(icon, ev);
-          });
-        }
-        setTimeout(recolorHomeMarkers, 0);
-        return result;
-      };
-      proto.__carburantiDirectPopupV7 = true;
-    }
-  }
-
+  // Do not intercept touch/click events here. Leaflet already binds popup opening
+  // to each L.Marker; custom touch handlers can suppress its synthetic click on iOS.
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(recolorHomeMarkers, 50));
     const best = document.getElementById('bestPrice');
     if (best) new MutationObserver(() => setTimeout(recolorHomeMarkers, 0)).observe(best, { childList: true, subtree: true });
+    const map = document.getElementById('map');
+    if (map) new MutationObserver(() => setTimeout(recolorHomeMarkers, 0)).observe(map, { childList: true, subtree: true });
     setTimeout(recolorHomeMarkers, 700);
   });
 })();
