@@ -1,9 +1,9 @@
-const CACHE_VERSION = 'carburanti-shell-20261020-13';
+const CACHE_VERSION = 'carburanti-shell-20261020-14';
 const DATA_CACHE = 'carburanti-data-v1';
 const SHELL = [
   './', './index.html',
-  './style.css?v=20261020-3', './home-ui.css?v=20261020-3',
-  './marker-fix.js?v=20261020-1', './geo-cache.js?v=20261020-1', './bootstrap.js?v=20261020-8',
+  './style.css?v=20261020-3', './home-ui.css?v=20261020-5',
+  './marker-fix.js?v=20261020-3', './geo-cache.js?v=20261020-1', './bootstrap.js?v=20261020-8',
   './app.js?v=20261020-3', './trip.js?v=20261020-3',
   './zone-zoom.js?v=20261020-1', './home-ui.js?v=20261020-4',
   './manifest.webmanifest?v=20261020-3', './icon.svg?v=20261020-3',
