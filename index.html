@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://tile.openstreetmap.org">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="style.css?v=20261020-3">
-  <link rel="stylesheet" href="home-ui.css?v=20261020-1">
+  <link rel="stylesheet" href="home-ui.css?v=20261020-2">
 </head>
 <body>
   <main class="app-shell">
@@ -29,18 +29,13 @@
         </div>
       </div>
       <div class="top-actions">
+        <button id="tripOpenBtn" class="trip-top-btn" type="button" aria-label="Viaggio: cerca distributori lungo un percorso" title="Cerca distributori e prezzi lungo un percorso specifico">
+          <span class="trip-top-icon" aria-hidden="true">↗</span>
+          <span class="trip-top-copy"><strong>Viaggio</strong><small>Percorso</small></span>
+        </button>
         <button id="settingsBtn" class="icon-btn" type="button" aria-label="Impostazioni" title="Impostazioni">⚙︎</button>
       </div>
     </header>
-
-    <button id="tripOpenBtn" class="trip-cta" type="button" aria-label="Viaggio: cerca distributori lungo un percorso" title="Cerca distributori e prezzi lungo un percorso specifico">
-      <span class="trip-cta-icon" aria-hidden="true">↗</span>
-      <span class="trip-cta-copy">
-        <strong>Viaggio</strong>
-        <small>Cerca distributori e prezzi lungo un percorso specifico</small>
-      </span>
-      <span class="trip-cta-arrow" aria-hidden="true">›</span>
-    </button>
 
     <section class="controls-card" aria-label="Filtri">
       <div class="fuel-tabs" role="group" aria-label="Carburante">
@@ -146,7 +141,7 @@
         <option value="tuscany">Tutta la Toscana</option>
         <option value="free">Libera</option>
       </select>
-      <p class="sheet-help">Con “Mia zona · 10 km” la posizione viene ricalcolata a ogni apertura dell’app.</p>
+      <p class="sheet-help">Con “Mia zona · 10 km” la posizione viene ricalcolata quando richiedi un aggiornamento della posizione.</p>
       <button id="saveSettingsBtn" class="wide-btn" type="button">Salva impostazioni</button>
     </section>
   </div>
@@ -199,10 +194,11 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="geo-cache.js?v=20261020-1"></script>
   <script src="bootstrap.js?v=20261020-8"></script>
   <script src="app.js?v=20261020-3"></script>
   <script src="trip.js?v=20261020-3"></script>
   <script src="zone-zoom.js?v=20261020-1"></script>
-  <script src="home-ui.js?v=20261020-2"></script>
+  <script src="home-ui.js?v=20261020-3"></script>
 </body>
 </html>
