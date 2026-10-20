@@ -1,16 +1,16 @@
-const CACHE_VERSION = 'carburanti-shell-20261020-2';
+const CACHE_VERSION = 'carburanti-shell-20261020-3';
 const SHELL = [
   './',
   './index.html',
-  './style.css?v=20261020-2',
-  './app.js?v=20261020-2',
-  './trip.js?v=20261020-2',
-  './manifest.webmanifest?v=20261020-2',
-  './icon.svg?v=20261020-2',
-  './favicon.svg?v=20261020-2',
-  './icon-192.png?v=20261020-2',
-  './icon-512.png?v=20261020-2',
-  './apple-touch-icon.png?v=20261020-2'
+  './style.css?v=20261020-3',
+  './app.js?v=20261020-3',
+  './trip.js?v=20261020-3',
+  './manifest.webmanifest?v=20261020-3',
+  './icon.svg?v=20261020-3',
+  './favicon.svg?v=20261020-3',
+  './icon-192.png?v=20261020-3',
+  './icon-512.png?v=20261020-3',
+  './apple-touch-icon.png?v=20261020-3'
 ];
 
 self.addEventListener('install', event => {
@@ -41,7 +41,7 @@ self.addEventListener('fetch', event => {
   if (url.origin === self.location.origin) {
     event.respondWith((async () => {
       try {
-        const fresh = await fetch(req);
+        const fresh = await fetch(req, { cache: 'no-store' });
         const cache = await caches.open(CACHE_VERSION);
         cache.put(req, fresh.clone()).catch(() => {});
         return fresh;
