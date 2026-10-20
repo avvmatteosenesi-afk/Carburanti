@@ -16,7 +16,6 @@
     if (zone) zone.value = 'position';
     document.getElementById('freeModeBadge')?.classList.add('hidden');
 
-    // Risposta immediata: torna subito sull'ultima posizione valida, se disponibile.
     if (map && current && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {
       try {
         map.invalidateSize(false);
@@ -33,13 +32,68 @@
       notice.classList.remove('hidden');
     }
 
-    // Questo tap è esplicito: forza un nuovo rilevamento GPS, senza usare la cache iniziale.
     window.__carburantiForceFreshGeo = true;
     try {
       app?.locateUser?.(true);
     } catch (_) {
       window.__carburantiForceFreshGeo = false;
     }
+  }
+
+  function enhanceGoogleMapsLink() {
+    requestAnimationFrame(() => {
+      const popup = document.querySelector('.leaflet-popup-content');
+      const link = popup?.querySelector('a[href*="google.com/maps"]');
+      if (!link) return;
+      link.textContent = 'Apri in Google Maps';
+      link.classList.add('google-maps-btn');
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener');
+    });
+  }
+
+  function installPriceMarkerActivation() {
+    const mapEl = document.getElementById('map');
+    const app = window.CarburantiApp;
+    const map = app?.state?.map;
+    if (!mapEl || !map) return;
+
+    let lastActivationAt = 0;
+
+    const activate = ev => {
+      const target = ev.target instanceof Element ? ev.target : null;
+      const icon = target?.closest('.price-marker-wrap');
+      if (!icon) return;
+
+      const now = Date.now();
+      if (now - lastActivationAt < 350) return;
+      lastActivationAt = now;
+
+      const markerMap = window.CarburantiApp?.state?.markerById;
+      if (!(markerMap instanceof Map)) return;
+
+      let selected = null;
+      for (const marker of markerMap.values()) {
+        if (marker?._icon === icon) {
+          selected = marker;
+          break;
+        }
+      }
+      if (!selected) return;
+
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      try {
+        selected.openPopup();
+        map.panTo(selected.getLatLng(), { animate: true, duration: .25 });
+      } catch (_) {}
+      setTimeout(enhanceGoogleMapsLink, 30);
+    };
+
+    mapEl.addEventListener('click', activate, true);
+    mapEl.addEventListener('touchend', activate, { capture: true, passive: false });
+    map.on('popupopen', enhanceGoogleMapsLink);
   }
 
   function enhanceHome() {
@@ -76,6 +130,8 @@
         recenterCurrentPosition();
       }, true);
     }
+
+    installPriceMarkerActivation();
 
     setTimeout(() => {
       try { window.CarburantiApp?.state?.map?.invalidateSize(false); } catch (_) {}
