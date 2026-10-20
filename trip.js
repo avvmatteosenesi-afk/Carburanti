@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261020-1';
+  const VERSION = '20261020-2';
   const NATIONAL_DATA_URL = `data/stations-it.json?v=${VERSION}`;
   const ITALY_CENTER = [42.5, 12.5];
 
@@ -213,8 +213,8 @@
   function priceClass(price, min) {
     const d = price - min;
     if (d <= 0.0005) return 'best';
-    if (d <= 0.0105) return 'near';
-    if (d <= 0.0305) return 'good';
+    if (d <= 0.0505) return 'near';
+    if (d <= 0.1005) return 'good';
     return 'normal';
   }
 
