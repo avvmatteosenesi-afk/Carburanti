@@ -9,6 +9,7 @@ Genera:
 from __future__ import annotations
 
 import csv
+import gzip
 import io
 import json
 import math
@@ -49,24 +50,68 @@ PROVINCE_BOUNDS = {
 UA = "Carburanti-PWA/1.0 (+GitHub Pages; MIMIT open data)"
 
 
-def fetch_text(url: str) -> str:
+def fetch_bytes(url: str, timeout: int = 45, attempts: int = 2) -> bytes:
     last_error = None
-    for attempt in range(1, 5):
+    for attempt in range(1, attempts + 1):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/csv,*/*"})
-            with urllib.request.urlopen(req, timeout=180) as response:
-                raw = response.read()
-            for enc in ("utf-8-sig", "utf-8", "latin-1"):
-                try:
-                    return raw.decode(enc)
-                except UnicodeDecodeError:
-                    pass
-            return raw.decode("utf-8", errors="replace")
+            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return response.read()
         except Exception as exc:
             last_error = exc
-            if attempt < 4:
-                time.sleep(attempt * 4)
+            if attempt < attempts:
+                time.sleep(3 * attempt)
     raise last_error
+
+
+def decode_csv(raw: bytes) -> str:
+    for enc in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            pass
+    return raw.decode("utf-8", errors="replace")
+
+
+def fetch_text(url: str, timeout: int = 45, attempts: int = 2) -> str:
+    return decode_csv(fetch_bytes(url, timeout=timeout, attempts=attempts))
+
+
+def fetch_mimit_pair():
+    """Preferisce MIMIT live; se non risponde usa l'ultimo snapshot MIMIT archiviato."""
+    try:
+        print("Download anagrafica MIMIT live…", flush=True)
+        stations_text = fetch_text(STATIONS_URL)
+        print("Download prezzi MIMIT live…", flush=True)
+        prices_text = fetch_text(PRICES_URL)
+        return stations_text, prices_text, {
+            "mode": "mimit-live",
+            "stations_url": STATIONS_URL,
+            "prices_url": PRICES_URL,
+            "snapshot_date": None,
+        }
+    except Exception as exc:
+        print(f"MIMIT live non raggiungibile ({exc}); uso fallback archivio giornaliero…", flush=True)
+
+    meta_url = "https://raw.githubusercontent.com/LucaDDDD/benzina-data/main/data/last_update.json"
+    meta = json.loads(fetch_text(meta_url, timeout=30, attempts=2))
+    date_text = str(meta.get("ultima_estrazione") or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_text):
+        raise RuntimeError("Fallback MIMIT: data snapshot non valida")
+    dt = datetime.strptime(date_text, "%Y-%m-%d")
+    stamp = dt.strftime("%Y%m%d")
+    base = f"https://raw.githubusercontent.com/LucaDDDD/benzina-data/main/data/{dt:%Y/%m}"
+    stations_url = f"{base}/anagrafica_impianti_attivi-{stamp}.csv.gz"
+    prices_url = f"{base}/prezzo_alle_8-{stamp}.csv.gz"
+    stations_text = decode_csv(gzip.decompress(fetch_bytes(stations_url, timeout=60, attempts=2)))
+    prices_text = decode_csv(gzip.decompress(fetch_bytes(prices_url, timeout=60, attempts=2)))
+    print(f"Fallback MIMIT caricato: snapshot {date_text}", flush=True)
+    return stations_text, prices_text, {
+        "mode": "mimit-archive-fallback",
+        "stations_url": stations_url,
+        "prices_url": prices_url,
+        "snapshot_date": date_text,
+    }
 
 
 def norm_key(value: str) -> str:
@@ -186,10 +231,7 @@ def choose_price(existing, candidate):
 
 
 def main():
-    print("Download anagrafica MIMIT…", flush=True)
-    stations_text = fetch_text(STATIONS_URL)
-    print("Download prezzi MIMIT…", flush=True)
-    prices_text = fetch_text(PRICES_URL)
+    stations_text, prices_text, source_info = fetch_mimit_pair()
 
     stations = {}
     malformed_coords = 0
@@ -265,8 +307,10 @@ def main():
     common_meta = {
         "generated_at": generated_at,
         "source": "MIMIT open data - Prezzi praticati e anagrafica degli impianti",
-        "source_stations": STATIONS_URL,
-        "source_prices": PRICES_URL,
+        "source_mode": source_info["mode"],
+        "source_snapshot_date": source_info["snapshot_date"],
+        "source_stations": source_info["stations_url"],
+        "source_prices": source_info["prices_url"],
         "fuels": ["benzina", "gasolio", "gpl", "metano"],
         "electric": False,
     }
