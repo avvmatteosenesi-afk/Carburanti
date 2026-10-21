@@ -40,6 +40,21 @@
     marker.openPopup();
   }
 
+  function popupAtPoint(x, y) {
+    const popup = document.querySelector('.leaflet-popup');
+    if (!popup) return null;
+    const r = popup.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom ? popup : null;
+  }
+
+  function mapsLinkAtPoint(x, y) {
+    const link = document.querySelector('.leaflet-popup a');
+    if (!link) return null;
+    const r = link.getBoundingClientRect();
+    const pad = 14;
+    return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad ? link : null;
+  }
+
   function googleDestination(link) {
     try {
       return new URL(link.href, location.href).searchParams.get('destination');
@@ -48,40 +63,58 @@
     }
   }
 
-  function openGoogleMaps(ev) {
-    const link = ev.target?.closest?.('.leaflet-popup a');
-    if (!link) return false;
+  function navigateGoogleMaps(link, ev) {
     const destination = googleDestination(link);
     if (!destination) return false;
     stop(ev);
-    // Direct Google Maps iOS URL scheme: avoids standalone-PWA handling of
-    // universal HTTPS links, which can remain trapped in the web app.
-    window.location.href = `comgooglemaps://?daddr=${encodeURIComponent(destination)}&directionsmode=driving`;
+    // HTTPS Google Maps directions URL is the reliable iOS/PWA hand-off.
+    // The real problem was the map stealing the popup touch before the anchor
+    // received it; coordinate hit-testing above prevents that.
+    window.location.href = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
     return true;
   }
-
-  document.addEventListener('touchend', ev => {
-    openGoogleMaps(ev);
-  }, { capture: true, passive: false });
-
-  document.addEventListener('click', ev => {
-    openGoogleMaps(ev);
-  }, true);
 
   document.addEventListener('DOMContentLoaded', () => {
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
 
+    // Popup pane must sit above marker/map hit targets and accept touch input.
+    const popupPane = document.querySelector('.leaflet-popup-pane');
+    if (popupPane) {
+      popupPane.style.zIndex = '900';
+      popupPane.style.pointerEvents = 'auto';
+    }
+
     mapEl.addEventListener('touchstart', ev => {
-      if (ev.target?.closest?.('.leaflet-popup')) { touchStart = null; return; }
       const t = ev.changedTouches?.[0];
-      touchStart = t ? { x: t.clientX, y: t.clientY } : null;
+      if (!t) return;
+      if (popupAtPoint(t.clientX, t.clientY)) {
+        touchStart = null;
+        // Do not let Leaflet start a map gesture underneath an open popup.
+        ev.stopPropagation();
+        return;
+      }
+      touchStart = { x: t.clientX, y: t.clientY };
     }, { capture: true, passive: true });
 
     mapEl.addEventListener('touchend', ev => {
-      if (ev.target?.closest?.('.leaflet-popup')) { touchStart = null; return; }
       const t = ev.changedTouches?.[0];
-      if (!t || !touchStart) return;
+      if (!t) return;
+
+      const link = mapsLinkAtPoint(t.clientX, t.clientY);
+      if (link) {
+        touchStart = null;
+        navigateGoogleMaps(link, ev);
+        return;
+      }
+
+      if (popupAtPoint(t.clientX, t.clientY)) {
+        touchStart = null;
+        stop(ev);
+        return;
+      }
+
+      if (!touchStart) return;
       const moved = Math.hypot(t.clientX - touchStart.x, t.clientY - touchStart.y);
       touchStart = null;
       if (moved > 14) return;
@@ -90,7 +123,15 @@
     }, { capture: true, passive: false });
 
     mapEl.addEventListener('click', ev => {
-      if (ev.target?.closest?.('.leaflet-popup')) return;
+      const link = ev.target?.closest?.('.leaflet-popup a');
+      if (link) {
+        navigateGoogleMaps(link, ev);
+        return;
+      }
+      if (ev.target?.closest?.('.leaflet-popup')) {
+        stop(ev);
+        return;
+      }
       if (Date.now() - lastTouchAt < 1200) {
         stop(ev);
         return;
