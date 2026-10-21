@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '17 5,17 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -47,5 +47,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-# deploy trigger: google-maps-fix-20261021-9
