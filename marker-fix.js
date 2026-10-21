@@ -4,6 +4,7 @@
   const HIT_RADIUS = 40;
   let touchStart = null;
   let lastTouchAt = 0;
+  let openTimer = null;
 
   function isPopupTarget(target) {
     return Boolean(target?.closest?.('.leaflet-popup'));
@@ -37,13 +38,23 @@
     if (!marker) return;
     stopMapEvent(ev);
     lastTouchAt = Date.now();
-    marker.openPopup();
+
+    // On iOS/Leaflet the same physical tap can still finish Leaflet's internal
+    // close cycle after our capture listener. Open only after that event cycle:
+    // this prevents the first tap from opening and immediately closing the popup.
+    if (openTimer) clearTimeout(openTimer);
+    openTimer = setTimeout(() => {
+      if (!marker?._map) return;
+      marker.openPopup();
+      protectPopup(marker.getPopup?.());
+      openTimer = null;
+    }, 0);
   }
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV18) return;
-    root.__carburantiProtectedV18 = true;
+    if (!root || root.__carburantiProtectedV19) return;
+    root.__carburantiProtectedV19 = true;
     root.style.pointerEvents = 'auto';
     root.style.zIndex = '1';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
@@ -60,8 +71,8 @@
 
   function attachToMap() {
     const appMap = window.CarburantiApp?.state?.map;
-    if (!appMap || appMap.__carburantiPopupV18) return Boolean(appMap);
-    appMap.__carburantiPopupV18 = true;
+    if (!appMap || appMap.__carburantiPopupV19) return Boolean(appMap);
+    appMap.__carburantiPopupV19 = true;
 
     const popupPane = appMap.getPane?.('popupPane');
     if (popupPane) {
@@ -110,9 +121,8 @@
 
     mapEl.addEventListener('click', ev => {
       if (isPopupTarget(ev.target)) return;
-      // iOS emits a synthetic click after touchend. Swallow it completely:
-      // otherwise Leaflet receives the same tap a second time and closes the popup
-      // that was just opened by touchend.
+      // iOS emits a synthetic click after touchend. Swallow it completely;
+      // the deferred open above happens after Leaflet has finished the tap cycle.
       if (Date.now() - lastTouchAt < 1200) {
         stopMapEvent(ev);
         return;
