@@ -5,6 +5,10 @@
   let touchStart = null;
   let lastTouchOpen = 0;
 
+  function isPopupInteraction(target) {
+    return Boolean(target?.closest?.('.leaflet-popup, .leaflet-popup-pane, .leaflet-control'));
+  }
+
   function openMarker(marker, ev) {
     if (!marker?.getPopup?.()) return false;
     if (ev?.cancelable) ev.preventDefault();
@@ -45,9 +49,8 @@
     icon.style.cursor = 'pointer';
     icon.setAttribute('role', 'button');
     icon.setAttribute('tabindex', '0');
-    if (icon.__carburantiTapV15) return;
-    icon.__carburantiTapV15 = true;
-    // Desktop/keyboard remains native. Touch is handled once at map-container level.
+    if (icon.__carburantiTapV16) return;
+    icon.__carburantiTapV16 = true;
     icon.addEventListener('click', ev => {
       if (Date.now() - lastTouchOpen < 800) return;
       openMarker(marker, ev);
@@ -61,22 +64,34 @@
     priceMarkers().forEach(bindMarker);
   }
 
+  function protectPopupLinks() {
+    document.querySelectorAll('.leaflet-popup a').forEach(link => {
+      if (link.__carburantiPopupLinkV16) return;
+      link.__carburantiPopupLinkV16 = true;
+      ['touchstart', 'touchend', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'].forEach(type => {
+        link.addEventListener(type, ev => ev.stopPropagation(), { passive: type !== 'touchend' });
+      });
+    });
+  }
+
   function installMapHitTesting() {
     const mapEl = document.getElementById('map');
-    if (!mapEl || mapEl.__carburantiHitTestV15) return;
-    mapEl.__carburantiHitTestV15 = true;
+    if (!mapEl || mapEl.__carburantiHitTestV16) return;
+    mapEl.__carburantiHitTestV16 = true;
 
     mapEl.addEventListener('touchstart', ev => {
+      if (isPopupInteraction(ev.target)) { touchStart = null; return; }
       const t = ev.changedTouches?.[0];
       touchStart = t ? { x: t.clientX, y: t.clientY } : null;
     }, { passive: true, capture: true });
 
     mapEl.addEventListener('touchend', ev => {
+      if (isPopupInteraction(ev.target)) { touchStart = null; return; }
       const t = ev.changedTouches?.[0];
       if (!t || !touchStart) return;
       const moved = Math.hypot(t.clientX - touchStart.x, t.clientY - touchStart.y);
       touchStart = null;
-      if (moved > 14) return; // it was a map drag, not a tap
+      if (moved > 14) return;
       const marker = nearestMarker(t.clientX, t.clientY);
       if (!marker) return;
       lastTouchOpen = Date.now();
@@ -84,6 +99,7 @@
     }, { passive: false, capture: true });
 
     mapEl.addEventListener('click', ev => {
+      if (isPopupInteraction(ev.target)) return;
       if (Date.now() - lastTouchOpen < 800) return;
       const marker = nearestMarker(ev.clientX, ev.clientY);
       if (marker) openMarker(marker, ev);
@@ -93,14 +109,14 @@
   function installMarkerHook() {
     if (!window.L?.Marker) return;
     const proto = L.Marker.prototype;
-    if (proto.__carburantiTapV15) return;
+    if (proto.__carburantiTapV16) return;
     const originalOnAdd = proto.onAdd;
     proto.onAdd = function(map) {
       const result = originalOnAdd.call(this, map);
       bindMarker(this);
       return result;
     };
-    proto.__carburantiTapV15 = true;
+    proto.__carburantiTapV16 = true;
   }
 
   function parsePrice(text) {
@@ -130,14 +146,16 @@
   document.addEventListener('DOMContentLoaded', () => {
     installMarkerHook();
     installMapHitTesting();
-    const refresh = () => setTimeout(() => { bindAllMarkers(); recolorHomeMarkers(); }, 80);
+    const refresh = () => setTimeout(() => { bindAllMarkers(); recolorHomeMarkers(); protectPopupLinks(); }, 80);
     document.getElementById('zoneSelect')?.addEventListener('change', refresh);
     document.querySelectorAll('.fuel-tab').forEach(btn => btn.addEventListener('click', refresh));
     const best = document.getElementById('bestPrice');
     if (best) new MutationObserver(refresh).observe(best, { childList: true, subtree: true });
+    document.getElementById('map')?.addEventListener('click', () => setTimeout(protectPopupLinks, 0));
     let passes = 0;
     const timer = setInterval(() => {
       bindAllMarkers();
+      protectPopupLinks();
       if (++passes >= 40) clearInterval(timer);
     }, 250);
     setTimeout(recolorHomeMarkers, 700);
