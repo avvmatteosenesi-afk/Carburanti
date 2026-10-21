@@ -17,15 +17,14 @@
   function bindMarker(marker) {
     const icon = marker?.getElement?.() || marker?._icon;
     if (!icon || !icon.classList?.contains('price-marker-wrap') || !marker.getPopup?.()) return;
-    if (icon.__carburantiNativeTapV13) return;
-    icon.__carburantiNativeTapV13 = true;
+    if (icon.__carburantiNativeTapV14) return;
+    icon.__carburantiNativeTapV14 = true;
     icon.style.pointerEvents = 'auto';
     icon.style.touchAction = 'manipulation';
     icon.style.cursor = 'pointer';
     icon.setAttribute('role', 'button');
     icon.setAttribute('tabindex', '0');
     icon.setAttribute('aria-label', `Apri dettagli distributore, prezzo ${icon.textContent?.trim() || ''}`);
-
     try { L.DomEvent.disableClickPropagation(icon); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(icon); } catch (_) {}
 
@@ -43,17 +42,38 @@
     icon.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') activate(ev); });
   }
 
+  function bindAllExistingMarkers() {
+    const app = window.CarburantiApp;
+    const registry = app?.state?.markerById;
+    if (registry?.forEach) registry.forEach(marker => bindMarker(marker));
+    const map = app?.state?.map;
+    if (map?.eachLayer) map.eachLayer(layer => {
+      if (layer instanceof L.Marker) bindMarker(layer);
+    });
+  }
+
   function installDirectBinding() {
     if (!window.L?.Marker) return;
     const proto = L.Marker.prototype;
-    if (proto.__carburantiDirectBindingV13) return;
-    const originalOnAdd = proto.onAdd;
-    proto.onAdd = function(map) {
-      const result = originalOnAdd.call(this, map);
-      bindMarker(this);
-      return result;
-    };
-    proto.__carburantiDirectBindingV13 = true;
+    if (!proto.__carburantiDirectBindingV14) {
+      const originalOnAdd = proto.onAdd;
+      proto.onAdd = function(map) {
+        const result = originalOnAdd.call(this, map);
+        bindMarker(this);
+        return result;
+      };
+      proto.__carburantiDirectBindingV14 = true;
+    }
+    // app.js creates many markers after marker-fix.js has loaded. Re-scan the
+    // actual marker registry so every rendered price gets the native handlers,
+    // including markers that escaped the onAdd hook during startup/re-render.
+    let passes = 0;
+    const timer = setInterval(() => {
+      bindAllExistingMarkers();
+      if (++passes >= 30) clearInterval(timer);
+    }, 250);
+    document.addEventListener('click', () => setTimeout(bindAllExistingMarkers, 0), true);
+    document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(bindAllExistingMarkers, 100));
   }
 
   function parsePrice(text) {
@@ -80,11 +100,15 @@
     if (spans[2]) spans[2].lastChild.textContent = wide ? ' entro 20 cent' : ' entro 10 cent';
   }
 
-  installDirectBinding();
   document.addEventListener('DOMContentLoaded', () => {
+    installDirectBinding();
     document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(recolorHomeMarkers, 80));
     const best = document.getElementById('bestPrice');
-    if (best) new MutationObserver(() => setTimeout(recolorHomeMarkers, 0)).observe(best, { childList: true, subtree: true });
+    if (best) new MutationObserver(() => {
+      setTimeout(recolorHomeMarkers, 0);
+      setTimeout(bindAllExistingMarkers, 0);
+    }).observe(best, { childList: true, subtree: true });
     setTimeout(recolorHomeMarkers, 700);
+    setTimeout(bindAllExistingMarkers, 700);
   });
 })();
