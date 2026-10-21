@@ -30,9 +30,10 @@
     const marker = markerFromTarget(ev.target);
     if (!marker) return;
     if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
-    const now = Date.now();
-    if (marker.__carburantiOpenedAt && now - marker.__carburantiOpenedAt < 350) return;
-    marker.__carburantiOpenedAt = now;
+
+    // Important: open only on the final click, never on touchstart/pointerdown.
+    // Opening at gesture start and then letting Leaflet receive the generated click
+    // toggled the same popup closed again on iOS.
     if (ev.cancelable) ev.preventDefault();
     ev.stopPropagation();
     ev.stopImmediatePropagation?.();
@@ -40,12 +41,8 @@
   }
 
   function installActivation() {
-    if (document.__carburantiActivationV10) return;
-    document.__carburantiActivationV10 = true;
-    // Use the beginning of the gesture. Leaflet/iOS may consume the later click
-    // when it thinks the finger movement belongs to the map.
-    document.addEventListener('pointerdown', activate, true);
-    document.addEventListener('touchstart', activate, { capture: true, passive: false });
+    if (document.__carburantiActivationV11) return;
+    document.__carburantiActivationV11 = true;
     document.addEventListener('click', activate, true);
     document.addEventListener('keydown', activate, true);
   }
@@ -53,7 +50,7 @@
   function installRegistration() {
     if (!window.L?.Marker) return;
     const proto = L.Marker.prototype;
-    if (proto.__carburantiRegistrationV10) return;
+    if (proto.__carburantiRegistrationV11) return;
     const originalOnAdd = proto.onAdd;
     const originalOnRemove = proto.onRemove;
     proto.onAdd = function(map) {
@@ -67,7 +64,7 @@
       if (id) markerRegistry.delete(id);
       return originalOnRemove.call(this, map);
     };
-    proto.__carburantiRegistrationV10 = true;
+    proto.__carburantiRegistrationV11 = true;
   }
 
   function parsePrice(text) {
