@@ -1,51 +1,6 @@
 (() => {
   'use strict';
 
-  const markerRegistry = new Map();
-  let sequence = 0;
-
-  function registerMarker(marker) {
-    const icon = marker?.getElement?.() || marker?._icon;
-    if (!icon || !icon.classList?.contains('price-marker-wrap') || !marker.getPopup?.()) return;
-    let id = icon.dataset.carburantiMarkerId;
-    if (!id) {
-      id = `fuel-${++sequence}`;
-      icon.dataset.carburantiMarkerId = id;
-    }
-    markerRegistry.set(id, marker);
-    icon.style.pointerEvents = 'auto';
-    icon.style.touchAction = 'manipulation';
-    icon.style.cursor = 'pointer';
-    icon.setAttribute('role', 'button');
-    icon.setAttribute('tabindex', '0');
-  }
-
-  function markerFromElement(target) {
-    const icon = target?.closest?.('.price-marker-wrap');
-    if (!icon) return null;
-    return markerRegistry.get(icon.dataset.carburantiMarkerId) || null;
-  }
-
-  function markerNearPoint(x, y) {
-    const direct = document.elementFromPoint(x, y);
-    const directMarker = markerFromElement(direct);
-    if (directMarker) return directMarker;
-
-    let best = null;
-    let bestDistance = 42;
-    document.querySelectorAll('#map .price-marker-wrap').forEach(icon => {
-      const r = icon.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const d = Math.hypot(cx - x, cy - y);
-      if (d < bestDistance) {
-        const marker = markerRegistry.get(icon.dataset.carburantiMarkerId);
-        if (marker) { best = marker; bestDistance = d; }
-      }
-    });
-    return best;
-  }
-
   function openMarker(marker, ev) {
     if (!marker) return false;
     if (ev?.cancelable) ev.preventDefault();
@@ -59,65 +14,46 @@
     } catch (_) { return false; }
   }
 
-  function onClick(ev) {
-    const marker = markerFromElement(ev.target) || markerNearPoint(ev.clientX, ev.clientY);
-    openMarker(marker, ev);
-  }
+  function bindMarker(marker) {
+    const icon = marker?.getElement?.() || marker?._icon;
+    if (!icon || !icon.classList?.contains('price-marker-wrap') || !marker.getPopup?.()) return;
+    if (icon.__carburantiNativeTapV13) return;
+    icon.__carburantiNativeTapV13 = true;
+    icon.style.pointerEvents = 'auto';
+    icon.style.touchAction = 'manipulation';
+    icon.style.cursor = 'pointer';
+    icon.setAttribute('role', 'button');
+    icon.setAttribute('tabindex', '0');
+    icon.setAttribute('aria-label', `Apri dettagli distributore, prezzo ${icon.textContent?.trim() || ''}`);
 
-  function onTouchEnd(ev) {
-    const t = ev.changedTouches?.[0];
-    if (!t) return;
-    const marker = markerFromElement(ev.target) || markerNearPoint(t.clientX, t.clientY);
-    if (!marker) return;
-    openMarker(marker, ev);
-    window.__carburantiLastTouch = Date.now();
-  }
+    try { L.DomEvent.disableClickPropagation(icon); } catch (_) {}
+    try { L.DomEvent.disableScrollPropagation(icon); } catch (_) {}
 
-  function onPointerUp(ev) {
-    if (ev.pointerType === 'touch') return;
-    const marker = markerFromElement(ev.target) || markerNearPoint(ev.clientX, ev.clientY);
-    openMarker(marker, ev);
-  }
-
-  function onKeyDown(ev) {
-    if (ev.key !== 'Enter' && ev.key !== ' ') return;
-    openMarker(markerFromElement(ev.target), ev);
-  }
-
-  function installActivation() {
-    if (document.__carburantiActivationV12) return;
-    document.__carburantiActivationV12 = true;
-    document.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
-    document.addEventListener('click', ev => {
-      if (Date.now() - (window.__carburantiLastTouch || 0) < 650) {
-        const marker = markerFromElement(ev.target);
-        if (marker) { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.(); }
-        return;
+    let lastTouch = 0;
+    const activate = ev => {
+      if (ev.type === 'click' && Date.now() - lastTouch < 700) {
+        ev.preventDefault?.(); ev.stopPropagation?.(); return false;
       }
-      onClick(ev);
-    }, true);
-    document.addEventListener('pointerup', onPointerUp, true);
-    document.addEventListener('keydown', onKeyDown, true);
+      if (ev.type === 'touchend') lastTouch = Date.now();
+      return openMarker(marker, ev);
+    };
+    icon.addEventListener('touchend', activate, { passive: false });
+    icon.addEventListener('click', activate, false);
+    icon.addEventListener('pointerup', ev => { if (ev.pointerType !== 'touch') activate(ev); }, false);
+    icon.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') activate(ev); });
   }
 
-  function installRegistration() {
+  function installDirectBinding() {
     if (!window.L?.Marker) return;
     const proto = L.Marker.prototype;
-    if (proto.__carburantiRegistrationV12) return;
+    if (proto.__carburantiDirectBindingV13) return;
     const originalOnAdd = proto.onAdd;
-    const originalOnRemove = proto.onRemove;
     proto.onAdd = function(map) {
       const result = originalOnAdd.call(this, map);
-      registerMarker(this);
+      bindMarker(this);
       return result;
     };
-    proto.onRemove = function(map) {
-      const icon = this.getElement?.() || this._icon;
-      const id = icon?.dataset?.carburantiMarkerId;
-      if (id) markerRegistry.delete(id);
-      return originalOnRemove.call(this, map);
-    };
-    proto.__carburantiRegistrationV12 = true;
+    proto.__carburantiDirectBindingV13 = true;
   }
 
   function parsePrice(text) {
@@ -144,8 +80,7 @@
     if (spans[2]) spans[2].lastChild.textContent = wide ? ' entro 20 cent' : ' entro 10 cent';
   }
 
-  installActivation();
-  installRegistration();
+  installDirectBinding();
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(recolorHomeMarkers, 80));
     const best = document.getElementById('bestPrice');
