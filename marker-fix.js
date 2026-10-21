@@ -5,8 +5,8 @@
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV21) return;
-    root.__carburantiProtectedV21 = true;
+    if (!root || root.__carburantiProtectedV22) return;
+    root.__carburantiProtectedV22 = true;
     root.style.pointerEvents = 'auto';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
@@ -19,33 +19,54 @@
     });
   }
 
-  function openFromPriceElement(target, ev) {
-    const price = target?.closest?.('.price-marker');
-    if (!price) return false;
-    const wrap = price.closest('.leaflet-marker-icon');
-    if (!wrap) return false;
-    const registry = window.CarburantiApp?.state?.markerById;
-    if (!registry?.values) return false;
-    const marker = Array.from(registry.values()).find(m => (m.getElement?.() || m._icon) === wrap);
-    if (!marker) return false;
+  function preparePopup(marker) {
+    const popup = marker?.getPopup?.();
+    if (!popup) return null;
+    // Root cause of the first-tap close: Leaflet auto-pans the map when the
+    // popup first opens; map moveend then calls renderStations(), which clears
+    // the marker layer and destroys the just-opened popup. The second tap works
+    // only because the map has already been panned. Disable that auto-pan.
+    popup.options.autoPan = false;
+    popup.options.keepInView = false;
+    popup.options.closeOnClick = false;
+    return popup;
+  }
 
+  function markerForElement(target) {
+    const price = target?.closest?.('.price-marker');
+    if (!price) return null;
+    const wrap = price.closest('.leaflet-marker-icon');
+    if (!wrap) return null;
+    const registry = window.CarburantiApp?.state?.markerById;
+    if (!registry?.values) return null;
+    return Array.from(registry.values()).find(m => (m.getElement?.() || m._icon) === wrap) || null;
+  }
+
+  function openFromPriceElement(target, ev) {
+    const marker = markerForElement(target);
+    if (!marker) return false;
     if (ev?.cancelable) ev.preventDefault();
     ev?.stopPropagation?.();
     ev?.stopImmediatePropagation?.();
     suppressClickUntil = Date.now() + 1200;
 
-    // Open synchronously on the actual price marker. No nearest-marker fallback,
-    // no delayed timer and no second Leaflet tap is allowed to toggle it closed.
+    const popup = preparePopup(marker);
     try { marker._map?.closePopup(); } catch (_) {}
     marker.openPopup();
-    protectPopup(marker.getPopup?.());
+    protectPopup(popup);
     return true;
+  }
+
+  function prepareAllMarkers() {
+    const registry = window.CarburantiApp?.state?.markerById;
+    if (!registry?.values) return;
+    for (const marker of registry.values()) preparePopup(marker);
   }
 
   function attachToMap() {
     const map = window.CarburantiApp?.state?.map;
-    if (!map || map.__carburantiPopupV21) return Boolean(map);
-    map.__carburantiPopupV21 = true;
+    if (!map || map.__carburantiPopupV22) return Boolean(map);
+    map.__carburantiPopupV22 = true;
     map.options.closePopupOnClick = false;
     const popupPane = map.getPane?.('popupPane');
     if (popupPane) {
@@ -66,22 +87,36 @@
 
     let tries = 0;
     const timer = setInterval(() => {
-      if (attachToMap() || ++tries > 100) clearInterval(timer);
+      const attached = attachToMap();
+      prepareAllMarkers();
+      if ((attached && window.CarburantiApp?.state?.loaded) || ++tries > 100) clearInterval(timer);
     }, 100);
 
-    // iOS Safari/PWA: pointerup is the authoritative single-tap event.
+    // New markers are recreated after zoom/pan/fuel/zone changes; ensure their
+    // popup options are corrected before any native Leaflet click can open them.
+    const observer = new MutationObserver(() => prepareAllMarkers());
+    observer.observe(mapEl, { childList: true, subtree: true });
+
+    mapEl.addEventListener('pointerdown', ev => {
+      const marker = markerForElement(ev.target);
+      if (marker) preparePopup(marker);
+    }, { capture: true, passive: true });
+
     mapEl.addEventListener('pointerup', ev => {
       if (ev.target?.closest?.('.leaflet-popup')) return;
       openFromPriceElement(ev.target, ev);
     }, { capture: true, passive: false });
 
-    // Fallback for older WebKit without reliable Pointer Events.
+    mapEl.addEventListener('touchstart', ev => {
+      const marker = markerForElement(ev.target);
+      if (marker) preparePopup(marker);
+    }, { capture: true, passive: true });
+
     mapEl.addEventListener('touchend', ev => {
       if (ev.target?.closest?.('.leaflet-popup')) return;
       openFromPriceElement(ev.target, ev);
     }, { capture: true, passive: false });
 
-    // Swallow the compatibility click generated after the touch/pointer event.
     mapEl.addEventListener('click', ev => {
       if (ev.target?.closest?.('.leaflet-popup')) return;
       if (Date.now() < suppressClickUntil) {
