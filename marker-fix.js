@@ -1,15 +1,15 @@
 (() => {
   'use strict';
 
-  if (window.L?.Popup?.prototype?.options) {
-    L.Popup.prototype.options.autoPan = false;
-  }
-
   const HIT_RADIUS = 40;
   let touchStart = null;
   let lastTouchAt = 0;
 
-  function stop(ev) {
+  function isPopupTarget(target) {
+    return Boolean(target?.closest?.('.leaflet-popup'));
+  }
+
+  function stopMapEvent(ev) {
     if (ev?.cancelable) ev.preventDefault();
     ev?.stopPropagation?.();
     ev?.stopImmediatePropagation?.();
@@ -33,44 +33,53 @@
     return distance <= HIT_RADIUS ? found : null;
   }
 
-  function open(marker, ev) {
+  function openMarker(marker, ev) {
     if (!marker) return;
-    stop(ev);
+    stopMapEvent(ev);
     lastTouchAt = Date.now();
     marker.openPopup();
   }
 
-  function popupAtPoint(x, y) {
-    const popup = document.querySelector('.leaflet-popup');
-    if (!popup) return null;
-    const r = popup.getBoundingClientRect();
-    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom ? popup : null;
+  function protectPopup(popup) {
+    const root = popup?.getElement?.();
+    if (!root || root.__carburantiProtectedV17) return;
+    root.__carburantiProtectedV17 = true;
+    root.style.pointerEvents = 'auto';
+    root.style.zIndex = '1';
+    try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
+    try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
+
+    root.querySelectorAll('a').forEach(link => {
+      link.style.pointerEvents = 'auto';
+      link.style.touchAction = 'manipulation';
+      // Do not prevent the default anchor action. The link must own the tap.
+      ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(type => {
+        link.addEventListener(type, ev => ev.stopPropagation(), { passive: true });
+      });
+    });
   }
 
-  function mapsLinkAtPoint(x, y) {
-    const link = document.querySelector('.leaflet-popup a');
-    if (!link) return null;
-    const r = link.getBoundingClientRect();
-    const pad = 14;
-    return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad ? link : null;
-  }
+  function attachToMap() {
+    const appMap = window.CarburantiApp?.state?.map;
+    if (!appMap || appMap.__carburantiPopupV17) return Boolean(appMap);
+    appMap.__carburantiPopupV17 = true;
 
-  function googleDestination(link) {
-    try {
-      return new URL(link.href, location.href).searchParams.get('destination');
-    } catch (_) {
-      return null;
+    const popupPane = appMap.getPane?.('popupPane');
+    if (popupPane) {
+      popupPane.style.zIndex = '1000';
+      popupPane.style.pointerEvents = 'auto';
     }
-  }
+    const userPane = appMap.getPane?.('userPane');
+    if (userPane) userPane.style.zIndex = '500';
 
-  function navigateGoogleMaps(link, ev) {
-    const destination = googleDestination(link);
-    if (!destination) return false;
-    stop(ev);
-    // HTTPS Google Maps directions URL is the reliable iOS/PWA hand-off.
-    // The real problem was the map stealing the popup touch before the anchor
-    // received it; coordinate hit-testing above prevents that.
-    window.location.href = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+    appMap.on('popupopen', ev => {
+      const pane = appMap.getPane?.('popupPane');
+      if (pane) {
+        pane.style.zIndex = '1000';
+        pane.style.pointerEvents = 'auto';
+      }
+      protectPopup(ev.popup);
+    });
     return true;
   }
 
@@ -78,66 +87,34 @@
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
 
-    // Popup pane must sit above marker/map hit targets and accept touch input.
-    const popupPane = document.querySelector('.leaflet-popup-pane');
-    if (popupPane) {
-      popupPane.style.zIndex = '900';
-      popupPane.style.pointerEvents = 'auto';
-    }
+    let tries = 0;
+    const attachTimer = setInterval(() => {
+      if (attachToMap() || ++tries > 40) clearInterval(attachTimer);
+    }, 100);
 
     mapEl.addEventListener('touchstart', ev => {
+      // Popup and its links are completely outside the custom map hit-testing path.
+      if (isPopupTarget(ev.target)) { touchStart = null; return; }
       const t = ev.changedTouches?.[0];
-      if (!t) return;
-      if (popupAtPoint(t.clientX, t.clientY)) {
-        touchStart = null;
-        // Do not let Leaflet start a map gesture underneath an open popup.
-        ev.stopPropagation();
-        return;
-      }
-      touchStart = { x: t.clientX, y: t.clientY };
+      touchStart = t ? { x: t.clientX, y: t.clientY } : null;
     }, { capture: true, passive: true });
 
     mapEl.addEventListener('touchend', ev => {
+      if (isPopupTarget(ev.target)) { touchStart = null; return; }
       const t = ev.changedTouches?.[0];
-      if (!t) return;
-
-      const link = mapsLinkAtPoint(t.clientX, t.clientY);
-      if (link) {
-        touchStart = null;
-        navigateGoogleMaps(link, ev);
-        return;
-      }
-
-      if (popupAtPoint(t.clientX, t.clientY)) {
-        touchStart = null;
-        stop(ev);
-        return;
-      }
-
-      if (!touchStart) return;
+      if (!t || !touchStart) return;
       const moved = Math.hypot(t.clientX - touchStart.x, t.clientY - touchStart.y);
       touchStart = null;
       if (moved > 14) return;
       const marker = nearest(t.clientX, t.clientY);
-      if (marker) open(marker, ev);
+      if (marker) openMarker(marker, ev);
     }, { capture: true, passive: false });
 
     mapEl.addEventListener('click', ev => {
-      const link = ev.target?.closest?.('.leaflet-popup a');
-      if (link) {
-        navigateGoogleMaps(link, ev);
-        return;
-      }
-      if (ev.target?.closest?.('.leaflet-popup')) {
-        stop(ev);
-        return;
-      }
-      if (Date.now() - lastTouchAt < 1200) {
-        stop(ev);
-        return;
-      }
+      if (isPopupTarget(ev.target)) return;
+      if (Date.now() - lastTouchAt < 1200) return;
       const marker = nearest(ev.clientX, ev.clientY);
-      if (marker) open(marker, ev);
+      if (marker) openMarker(marker, ev);
     }, true);
   });
 })();
