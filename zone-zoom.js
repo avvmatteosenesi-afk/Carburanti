@@ -1,22 +1,25 @@
 (() => {
   'use strict';
 
-  const LOCAL_ZOOM = 13;
+  const LOCAL_ZOOM = 14;
   const TUSCANY_BOUNDS = [[42.20, 9.72], [44.53, 12.22]];
 
   const QUICK = {
-    'pistoia-firenze': { bounds: [[43.71, 10.82], [43.99, 11.34]], maxZoom: 10 },
-    'pistoia-prato': { bounds: [[43.82, 10.82], [44.00, 11.18]], maxZoom: 11 },
-    'prato-firenze': { bounds: [[43.70, 11.02], [43.94, 11.35]], maxZoom: 11 },
-    'pistoia-agliana': { bounds: [[43.86, 10.84], [43.98, 11.02]], maxZoom: 12 },
-    'agliana-prato': { bounds: [[43.84, 10.96], [43.93, 11.14]], maxZoom: 12 }
+    'pistoia-firenze': { bounds: [[43.71, 10.82], [43.99, 11.34]], maxZoom: 11 },
+    'pistoia-prato': { bounds: [[43.82, 10.82], [44.00, 11.18]], maxZoom: 12 },
+    'prato-firenze': { bounds: [[43.70, 11.02], [43.94, 11.35]], maxZoom: 12 },
+    'pistoia-agliana': { bounds: [[43.86, 10.84], [43.98, 11.02]], maxZoom: 13 },
+    'agliana-prato': { bounds: [[43.84, 10.96], [43.93, 11.14]], maxZoom: 13 }
   };
 
-  function fit(map, bounds, maxZoom, padding = [28, 28]) {
+  function fit(map, bounds, maxZoom, padding = [18, 18], tighten = true) {
     const b = L.latLngBounds(bounds);
     if (!b.isValid()) return false;
     map.invalidateSize(false);
     map.fitBounds(b, { padding, maxZoom, animate: false });
+    if (tighten && map.getZoom() < maxZoom) {
+      map.setZoom(Math.min(maxZoom, map.getZoom() + 1), { animate: false });
+    }
     return true;
   }
 
@@ -45,18 +48,26 @@
       return true;
     }
 
-    if (zone === 'tuscany') return fit(map, TUSCANY_BOUNDS, 9, [24, 24]);
+    if (zone === 'tuscany') return fit(map, TUSCANY_BOUNDS, 10, [16, 16]);
 
     if (zone.startsWith('province:')) {
       const code = zone.split(':')[1];
       const points = provinceBounds(app, code);
       if (!points) return false;
-      return fit(map, points, code === 'PO' ? 11 : 10, [34, 34]);
+      return fit(map, points, code === 'PO' ? 12 : 11, [18, 18]);
     }
 
     if (zone.startsWith('quick:')) {
       const q = QUICK[zone.split(':')[1]];
-      return q ? fit(map, q.bounds, q.maxZoom, [30, 30]) : false;
+      return q ? fit(map, q.bounds, q.maxZoom, [18, 18]) : false;
+    }
+
+    // In Libera keep the user's current center, but start one level closer
+    // when the mode is selected from another preset.
+    if (zone === 'free') {
+      map.invalidateSize(false);
+      if (map.getZoom() < 15) map.setZoom(map.getZoom() + 1, { animate: false });
+      return true;
     }
 
     return false;
