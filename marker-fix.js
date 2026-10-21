@@ -34,27 +34,31 @@
     return distance <= HIT_RADIUS ? found : null;
   }
 
+  function forceOpen(marker) {
+    if (!marker?._map) return;
+    const map = marker._map;
+    try { map.closePopup(); } catch (_) {}
+    marker.openPopup();
+    protectPopup(marker.getPopup?.());
+  }
+
   function openMarker(marker, ev) {
     if (!marker) return;
     stopMapEvent(ev);
     lastTouchAt = Date.now();
-
-    // On iOS/Leaflet the same physical tap can still finish Leaflet's internal
-    // close cycle after our capture listener. Open only after that event cycle:
-    // this prevents the first tap from opening and immediately closing the popup.
     if (openTimer) clearTimeout(openTimer);
+    // Wait beyond iOS' synthetic-click phase, then open once. With
+    // closePopupOnClick=false the map cannot immediately close this popup.
     openTimer = setTimeout(() => {
-      if (!marker?._map) return;
-      marker.openPopup();
-      protectPopup(marker.getPopup?.());
+      forceOpen(marker);
       openTimer = null;
-    }, 0);
+    }, 80);
   }
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV19) return;
-    root.__carburantiProtectedV19 = true;
+    if (!root || root.__carburantiProtectedV20) return;
+    root.__carburantiProtectedV20 = true;
     root.style.pointerEvents = 'auto';
     root.style.zIndex = '1';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
@@ -63,16 +67,21 @@
     root.querySelectorAll('a').forEach(link => {
       link.style.pointerEvents = 'auto';
       link.style.touchAction = 'manipulation';
-      ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(type => {
+      ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup'].forEach(type => {
         link.addEventListener(type, ev => ev.stopPropagation(), { passive: true });
       });
+      link.addEventListener('click', ev => ev.stopPropagation());
     });
   }
 
   function attachToMap() {
     const appMap = window.CarburantiApp?.state?.map;
-    if (!appMap || appMap.__carburantiPopupV19) return Boolean(appMap);
-    appMap.__carburantiPopupV19 = true;
+    if (!appMap || appMap.__carburantiPopupV20) return Boolean(appMap);
+    appMap.__carburantiPopupV20 = true;
+
+    // Critical fix: a tap on the map must never close the popup opened by that
+    // same physical touch. Popups still auto-close when another marker opens.
+    appMap.options.closePopupOnClick = false;
 
     const popupPane = appMap.getPane?.('popupPane');
     if (popupPane) {
@@ -82,14 +91,7 @@
     const userPane = appMap.getPane?.('userPane');
     if (userPane) userPane.style.zIndex = '500';
 
-    appMap.on('popupopen', ev => {
-      const pane = appMap.getPane?.('popupPane');
-      if (pane) {
-        pane.style.zIndex = '1000';
-        pane.style.pointerEvents = 'auto';
-      }
-      protectPopup(ev.popup);
-    });
+    appMap.on('popupopen', ev => protectPopup(ev.popup));
     return true;
   }
 
@@ -99,7 +101,7 @@
 
     let tries = 0;
     const attachTimer = setInterval(() => {
-      if (attachToMap() || ++tries > 40) clearInterval(attachTimer);
+      if (attachToMap() || ++tries > 80) clearInterval(attachTimer);
     }, 100);
 
     mapEl.addEventListener('touchstart', ev => {
@@ -121,9 +123,7 @@
 
     mapEl.addEventListener('click', ev => {
       if (isPopupTarget(ev.target)) return;
-      // iOS emits a synthetic click after touchend. Swallow it completely;
-      // the deferred open above happens after Leaflet has finished the tap cycle.
-      if (Date.now() - lastTouchAt < 1200) {
+      if (Date.now() - lastTouchAt < 1500) {
         stopMapEvent(ev);
         return;
       }
