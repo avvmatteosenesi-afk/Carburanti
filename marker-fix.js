@@ -1,79 +1,106 @@
 (() => {
   'use strict';
 
+  const HIT_RADIUS = 38;
+  let touchStart = null;
+  let lastTouchOpen = 0;
+
   function openMarker(marker, ev) {
-    if (!marker) return false;
+    if (!marker?.getPopup?.()) return false;
     if (ev?.cancelable) ev.preventDefault();
     ev?.stopPropagation?.();
     ev?.stopImmediatePropagation?.();
     try {
       marker.openPopup();
-      const map = marker._map;
-      if (map) map.panInside(marker.getLatLng(), { padding: [45, 90], animate: true });
+      marker._map?.panInside(marker.getLatLng(), { padding: [45, 90], animate: true });
       return true;
     } catch (_) { return false; }
+  }
+
+  function priceMarkers() {
+    const registry = window.CarburantiApp?.state?.markerById;
+    if (!registry?.values) return [];
+    return Array.from(registry.values()).filter(marker => marker?._map && marker.getPopup?.());
+  }
+
+  function nearestMarker(clientX, clientY) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const marker of priceMarkers()) {
+      const icon = marker.getElement?.() || marker._icon;
+      if (!icon) continue;
+      const r = icon.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = Math.hypot(clientX - cx, clientY - cy);
+      if (d < bestDistance) { bestDistance = d; best = marker; }
+    }
+    return bestDistance <= HIT_RADIUS ? best : null;
   }
 
   function bindMarker(marker) {
     const icon = marker?.getElement?.() || marker?._icon;
     if (!icon || !icon.classList?.contains('price-marker-wrap') || !marker.getPopup?.()) return;
-    if (icon.__carburantiNativeTapV14) return;
-    icon.__carburantiNativeTapV14 = true;
     icon.style.pointerEvents = 'auto';
-    icon.style.touchAction = 'manipulation';
     icon.style.cursor = 'pointer';
     icon.setAttribute('role', 'button');
     icon.setAttribute('tabindex', '0');
-    icon.setAttribute('aria-label', `Apri dettagli distributore, prezzo ${icon.textContent?.trim() || ''}`);
-    try { L.DomEvent.disableClickPropagation(icon); } catch (_) {}
-    try { L.DomEvent.disableScrollPropagation(icon); } catch (_) {}
-
-    let lastTouch = 0;
-    const activate = ev => {
-      if (ev.type === 'click' && Date.now() - lastTouch < 700) {
-        ev.preventDefault?.(); ev.stopPropagation?.(); return false;
-      }
-      if (ev.type === 'touchend') lastTouch = Date.now();
-      return openMarker(marker, ev);
-    };
-    icon.addEventListener('touchend', activate, { passive: false });
-    icon.addEventListener('click', activate, false);
-    icon.addEventListener('pointerup', ev => { if (ev.pointerType !== 'touch') activate(ev); }, false);
-    icon.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') activate(ev); });
-  }
-
-  function bindAllExistingMarkers() {
-    const app = window.CarburantiApp;
-    const registry = app?.state?.markerById;
-    if (registry?.forEach) registry.forEach(marker => bindMarker(marker));
-    const map = app?.state?.map;
-    if (map?.eachLayer) map.eachLayer(layer => {
-      if (layer instanceof L.Marker) bindMarker(layer);
+    if (icon.__carburantiTapV15) return;
+    icon.__carburantiTapV15 = true;
+    // Desktop/keyboard remains native. Touch is handled once at map-container level.
+    icon.addEventListener('click', ev => {
+      if (Date.now() - lastTouchOpen < 800) return;
+      openMarker(marker, ev);
+    });
+    icon.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' ') openMarker(marker, ev);
     });
   }
 
-  function installDirectBinding() {
+  function bindAllMarkers() {
+    priceMarkers().forEach(bindMarker);
+  }
+
+  function installMapHitTesting() {
+    const mapEl = document.getElementById('map');
+    if (!mapEl || mapEl.__carburantiHitTestV15) return;
+    mapEl.__carburantiHitTestV15 = true;
+
+    mapEl.addEventListener('touchstart', ev => {
+      const t = ev.changedTouches?.[0];
+      touchStart = t ? { x: t.clientX, y: t.clientY } : null;
+    }, { passive: true, capture: true });
+
+    mapEl.addEventListener('touchend', ev => {
+      const t = ev.changedTouches?.[0];
+      if (!t || !touchStart) return;
+      const moved = Math.hypot(t.clientX - touchStart.x, t.clientY - touchStart.y);
+      touchStart = null;
+      if (moved > 14) return; // it was a map drag, not a tap
+      const marker = nearestMarker(t.clientX, t.clientY);
+      if (!marker) return;
+      lastTouchOpen = Date.now();
+      openMarker(marker, ev);
+    }, { passive: false, capture: true });
+
+    mapEl.addEventListener('click', ev => {
+      if (Date.now() - lastTouchOpen < 800) return;
+      const marker = nearestMarker(ev.clientX, ev.clientY);
+      if (marker) openMarker(marker, ev);
+    }, true);
+  }
+
+  function installMarkerHook() {
     if (!window.L?.Marker) return;
     const proto = L.Marker.prototype;
-    if (!proto.__carburantiDirectBindingV14) {
-      const originalOnAdd = proto.onAdd;
-      proto.onAdd = function(map) {
-        const result = originalOnAdd.call(this, map);
-        bindMarker(this);
-        return result;
-      };
-      proto.__carburantiDirectBindingV14 = true;
-    }
-    // app.js creates many markers after marker-fix.js has loaded. Re-scan the
-    // actual marker registry so every rendered price gets the native handlers,
-    // including markers that escaped the onAdd hook during startup/re-render.
-    let passes = 0;
-    const timer = setInterval(() => {
-      bindAllExistingMarkers();
-      if (++passes >= 30) clearInterval(timer);
-    }, 250);
-    document.addEventListener('click', () => setTimeout(bindAllExistingMarkers, 0), true);
-    document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(bindAllExistingMarkers, 100));
+    if (proto.__carburantiTapV15) return;
+    const originalOnAdd = proto.onAdd;
+    proto.onAdd = function(map) {
+      const result = originalOnAdd.call(this, map);
+      bindMarker(this);
+      return result;
+    };
+    proto.__carburantiTapV15 = true;
   }
 
   function parsePrice(text) {
@@ -101,14 +128,18 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    installDirectBinding();
-    document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(recolorHomeMarkers, 80));
+    installMarkerHook();
+    installMapHitTesting();
+    const refresh = () => setTimeout(() => { bindAllMarkers(); recolorHomeMarkers(); }, 80);
+    document.getElementById('zoneSelect')?.addEventListener('change', refresh);
+    document.querySelectorAll('.fuel-tab').forEach(btn => btn.addEventListener('click', refresh));
     const best = document.getElementById('bestPrice');
-    if (best) new MutationObserver(() => {
-      setTimeout(recolorHomeMarkers, 0);
-      setTimeout(bindAllExistingMarkers, 0);
-    }).observe(best, { childList: true, subtree: true });
+    if (best) new MutationObserver(refresh).observe(best, { childList: true, subtree: true });
+    let passes = 0;
+    const timer = setInterval(() => {
+      bindAllMarkers();
+      if (++passes >= 40) clearInterval(timer);
+    }, 250);
     setTimeout(recolorHomeMarkers, 700);
-    setTimeout(bindAllExistingMarkers, 700);
   });
 })();
