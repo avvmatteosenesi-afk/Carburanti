@@ -42,8 +42,8 @@
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV17) return;
-    root.__carburantiProtectedV17 = true;
+    if (!root || root.__carburantiProtectedV18) return;
+    root.__carburantiProtectedV18 = true;
     root.style.pointerEvents = 'auto';
     root.style.zIndex = '1';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
@@ -52,7 +52,6 @@
     root.querySelectorAll('a').forEach(link => {
       link.style.pointerEvents = 'auto';
       link.style.touchAction = 'manipulation';
-      // Do not prevent the default anchor action. The link must own the tap.
       ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(type => {
         link.addEventListener(type, ev => ev.stopPropagation(), { passive: true });
       });
@@ -61,8 +60,8 @@
 
   function attachToMap() {
     const appMap = window.CarburantiApp?.state?.map;
-    if (!appMap || appMap.__carburantiPopupV17) return Boolean(appMap);
-    appMap.__carburantiPopupV17 = true;
+    if (!appMap || appMap.__carburantiPopupV18) return Boolean(appMap);
+    appMap.__carburantiPopupV18 = true;
 
     const popupPane = appMap.getPane?.('popupPane');
     if (popupPane) {
@@ -93,7 +92,6 @@
     }, 100);
 
     mapEl.addEventListener('touchstart', ev => {
-      // Popup and its links are completely outside the custom map hit-testing path.
       if (isPopupTarget(ev.target)) { touchStart = null; return; }
       const t = ev.changedTouches?.[0];
       touchStart = t ? { x: t.clientX, y: t.clientY } : null;
@@ -112,7 +110,13 @@
 
     mapEl.addEventListener('click', ev => {
       if (isPopupTarget(ev.target)) return;
-      if (Date.now() - lastTouchAt < 1200) return;
+      // iOS emits a synthetic click after touchend. Swallow it completely:
+      // otherwise Leaflet receives the same tap a second time and closes the popup
+      // that was just opened by touchend.
+      if (Date.now() - lastTouchAt < 1200) {
+        stopMapEvent(ev);
+        return;
+      }
       const marker = nearest(ev.clientX, ev.clientY);
       if (marker) openMarker(marker, ev);
     }, true);
