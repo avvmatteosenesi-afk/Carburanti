@@ -20,37 +20,90 @@
     icon.setAttribute('tabindex', '0');
   }
 
-  function markerFromTarget(target) {
+  function markerFromElement(target) {
     const icon = target?.closest?.('.price-marker-wrap');
     if (!icon) return null;
     return markerRegistry.get(icon.dataset.carburantiMarkerId) || null;
   }
 
-  function activate(ev) {
-    const marker = markerFromTarget(ev.target);
-    if (!marker) return;
-    if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+  function markerNearPoint(x, y) {
+    const direct = document.elementFromPoint(x, y);
+    const directMarker = markerFromElement(direct);
+    if (directMarker) return directMarker;
 
-    // Important: open only on the final click, never on touchstart/pointerdown.
-    // Opening at gesture start and then letting Leaflet receive the generated click
-    // toggled the same popup closed again on iOS.
-    if (ev.cancelable) ev.preventDefault();
-    ev.stopPropagation();
-    ev.stopImmediatePropagation?.();
-    try { marker.openPopup(); } catch (_) {}
+    let best = null;
+    let bestDistance = 42;
+    document.querySelectorAll('#map .price-marker-wrap').forEach(icon => {
+      const r = icon.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = Math.hypot(cx - x, cy - y);
+      if (d < bestDistance) {
+        const marker = markerRegistry.get(icon.dataset.carburantiMarkerId);
+        if (marker) { best = marker; bestDistance = d; }
+      }
+    });
+    return best;
+  }
+
+  function openMarker(marker, ev) {
+    if (!marker) return false;
+    if (ev?.cancelable) ev.preventDefault();
+    ev?.stopPropagation?.();
+    ev?.stopImmediatePropagation?.();
+    try {
+      marker.openPopup();
+      const map = marker._map;
+      if (map) map.panInside(marker.getLatLng(), { padding: [45, 90], animate: true });
+      return true;
+    } catch (_) { return false; }
+  }
+
+  function onClick(ev) {
+    const marker = markerFromElement(ev.target) || markerNearPoint(ev.clientX, ev.clientY);
+    openMarker(marker, ev);
+  }
+
+  function onTouchEnd(ev) {
+    const t = ev.changedTouches?.[0];
+    if (!t) return;
+    const marker = markerFromElement(ev.target) || markerNearPoint(t.clientX, t.clientY);
+    if (!marker) return;
+    openMarker(marker, ev);
+    window.__carburantiLastTouch = Date.now();
+  }
+
+  function onPointerUp(ev) {
+    if (ev.pointerType === 'touch') return;
+    const marker = markerFromElement(ev.target) || markerNearPoint(ev.clientX, ev.clientY);
+    openMarker(marker, ev);
+  }
+
+  function onKeyDown(ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    openMarker(markerFromElement(ev.target), ev);
   }
 
   function installActivation() {
-    if (document.__carburantiActivationV11) return;
-    document.__carburantiActivationV11 = true;
-    document.addEventListener('click', activate, true);
-    document.addEventListener('keydown', activate, true);
+    if (document.__carburantiActivationV12) return;
+    document.__carburantiActivationV12 = true;
+    document.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
+    document.addEventListener('click', ev => {
+      if (Date.now() - (window.__carburantiLastTouch || 0) < 650) {
+        const marker = markerFromElement(ev.target);
+        if (marker) { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.(); }
+        return;
+      }
+      onClick(ev);
+    }, true);
+    document.addEventListener('pointerup', onPointerUp, true);
+    document.addEventListener('keydown', onKeyDown, true);
   }
 
   function installRegistration() {
     if (!window.L?.Marker) return;
     const proto = L.Marker.prototype;
-    if (proto.__carburantiRegistrationV11) return;
+    if (proto.__carburantiRegistrationV12) return;
     const originalOnAdd = proto.onAdd;
     const originalOnRemove = proto.onRemove;
     proto.onAdd = function(map) {
@@ -64,7 +117,7 @@
       if (id) markerRegistry.delete(id);
       return originalOnRemove.call(this, map);
     };
-    proto.__carburantiRegistrationV11 = true;
+    proto.__carburantiRegistrationV12 = true;
   }
 
   function parsePrice(text) {
@@ -94,7 +147,7 @@
   installActivation();
   installRegistration();
   document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(recolorHomeMarkers, 50));
+    document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(recolorHomeMarkers, 80));
     const best = document.getElementById('bestPrice');
     if (best) new MutationObserver(() => setTimeout(recolorHomeMarkers, 0)).observe(best, { childList: true, subtree: true });
     setTimeout(recolorHomeMarkers, 700);
