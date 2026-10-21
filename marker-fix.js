@@ -1,97 +1,62 @@
 (() => {
   'use strict';
 
-  const HIT_RADIUS = 40;
-  let touchStart = null;
-  let lastTouchAt = 0;
-  let openTimer = null;
-
-  function isPopupTarget(target) {
-    return Boolean(target?.closest?.('.leaflet-popup'));
-  }
-
-  function stopMapEvent(ev) {
-    if (ev?.cancelable) ev.preventDefault();
-    ev?.stopPropagation?.();
-    ev?.stopImmediatePropagation?.();
-  }
-
-  function markers() {
-    const registry = window.CarburantiApp?.state?.markerById;
-    return registry?.values ? Array.from(registry.values()).filter(m => m?._map && m.getPopup?.()) : [];
-  }
-
-  function nearest(x, y) {
-    let found = null;
-    let distance = Infinity;
-    for (const marker of markers()) {
-      const icon = marker.getElement?.() || marker._icon;
-      if (!icon) continue;
-      const r = icon.getBoundingClientRect();
-      const d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2));
-      if (d < distance) { distance = d; found = marker; }
-    }
-    return distance <= HIT_RADIUS ? found : null;
-  }
-
-  function forceOpen(marker) {
-    if (!marker?._map) return;
-    const map = marker._map;
-    try { map.closePopup(); } catch (_) {}
-    marker.openPopup();
-    protectPopup(marker.getPopup?.());
-  }
-
-  function openMarker(marker, ev) {
-    if (!marker) return;
-    stopMapEvent(ev);
-    lastTouchAt = Date.now();
-    if (openTimer) clearTimeout(openTimer);
-    // Wait beyond iOS' synthetic-click phase, then open once. With
-    // closePopupOnClick=false the map cannot immediately close this popup.
-    openTimer = setTimeout(() => {
-      forceOpen(marker);
-      openTimer = null;
-    }, 80);
-  }
+  let suppressClickUntil = 0;
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV20) return;
-    root.__carburantiProtectedV20 = true;
+    if (!root || root.__carburantiProtectedV21) return;
+    root.__carburantiProtectedV21 = true;
     root.style.pointerEvents = 'auto';
-    root.style.zIndex = '1';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
-
     root.querySelectorAll('a').forEach(link => {
       link.style.pointerEvents = 'auto';
       link.style.touchAction = 'manipulation';
-      ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup'].forEach(type => {
-        link.addEventListener(type, ev => ev.stopPropagation(), { passive: true });
+      ['pointerdown','pointerup','touchstart','touchend','mousedown','mouseup','click'].forEach(type => {
+        link.addEventListener(type, ev => ev.stopPropagation());
       });
-      link.addEventListener('click', ev => ev.stopPropagation());
     });
   }
 
+  function openFromPriceElement(target, ev) {
+    const price = target?.closest?.('.price-marker');
+    if (!price) return false;
+    const wrap = price.closest('.leaflet-marker-icon');
+    if (!wrap) return false;
+    const registry = window.CarburantiApp?.state?.markerById;
+    if (!registry?.values) return false;
+    const marker = Array.from(registry.values()).find(m => (m.getElement?.() || m._icon) === wrap);
+    if (!marker) return false;
+
+    if (ev?.cancelable) ev.preventDefault();
+    ev?.stopPropagation?.();
+    ev?.stopImmediatePropagation?.();
+    suppressClickUntil = Date.now() + 1200;
+
+    // Open synchronously on the actual price marker. No nearest-marker fallback,
+    // no delayed timer and no second Leaflet tap is allowed to toggle it closed.
+    try { marker._map?.closePopup(); } catch (_) {}
+    marker.openPopup();
+    protectPopup(marker.getPopup?.());
+    return true;
+  }
+
   function attachToMap() {
-    const appMap = window.CarburantiApp?.state?.map;
-    if (!appMap || appMap.__carburantiPopupV20) return Boolean(appMap);
-    appMap.__carburantiPopupV20 = true;
-
-    // Critical fix: a tap on the map must never close the popup opened by that
-    // same physical touch. Popups still auto-close when another marker opens.
-    appMap.options.closePopupOnClick = false;
-
-    const popupPane = appMap.getPane?.('popupPane');
+    const map = window.CarburantiApp?.state?.map;
+    if (!map || map.__carburantiPopupV21) return Boolean(map);
+    map.__carburantiPopupV21 = true;
+    map.options.closePopupOnClick = false;
+    const popupPane = map.getPane?.('popupPane');
     if (popupPane) {
       popupPane.style.zIndex = '1000';
       popupPane.style.pointerEvents = 'auto';
     }
-    const userPane = appMap.getPane?.('userPane');
+    const stationPane = map.getPane?.('stationPane');
+    if (stationPane) stationPane.style.pointerEvents = 'auto';
+    const userPane = map.getPane?.('userPane');
     if (userPane) userPane.style.zIndex = '500';
-
-    appMap.on('popupopen', ev => protectPopup(ev.popup));
+    map.on('popupopen', e => protectPopup(e.popup));
     return true;
   }
 
@@ -100,35 +65,32 @@
     if (!mapEl) return;
 
     let tries = 0;
-    const attachTimer = setInterval(() => {
-      if (attachToMap() || ++tries > 80) clearInterval(attachTimer);
+    const timer = setInterval(() => {
+      if (attachToMap() || ++tries > 100) clearInterval(timer);
     }, 100);
 
-    mapEl.addEventListener('touchstart', ev => {
-      if (isPopupTarget(ev.target)) { touchStart = null; return; }
-      const t = ev.changedTouches?.[0];
-      touchStart = t ? { x: t.clientX, y: t.clientY } : null;
-    }, { capture: true, passive: true });
-
-    mapEl.addEventListener('touchend', ev => {
-      if (isPopupTarget(ev.target)) { touchStart = null; return; }
-      const t = ev.changedTouches?.[0];
-      if (!t || !touchStart) return;
-      const moved = Math.hypot(t.clientX - touchStart.x, t.clientY - touchStart.y);
-      touchStart = null;
-      if (moved > 14) return;
-      const marker = nearest(t.clientX, t.clientY);
-      if (marker) openMarker(marker, ev);
+    // iOS Safari/PWA: pointerup is the authoritative single-tap event.
+    mapEl.addEventListener('pointerup', ev => {
+      if (ev.target?.closest?.('.leaflet-popup')) return;
+      openFromPriceElement(ev.target, ev);
     }, { capture: true, passive: false });
 
+    // Fallback for older WebKit without reliable Pointer Events.
+    mapEl.addEventListener('touchend', ev => {
+      if (ev.target?.closest?.('.leaflet-popup')) return;
+      openFromPriceElement(ev.target, ev);
+    }, { capture: true, passive: false });
+
+    // Swallow the compatibility click generated after the touch/pointer event.
     mapEl.addEventListener('click', ev => {
-      if (isPopupTarget(ev.target)) return;
-      if (Date.now() - lastTouchAt < 1500) {
-        stopMapEvent(ev);
+      if (ev.target?.closest?.('.leaflet-popup')) return;
+      if (Date.now() < suppressClickUntil) {
+        if (ev.cancelable) ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation?.();
         return;
       }
-      const marker = nearest(ev.clientX, ev.clientY);
-      if (marker) openMarker(marker, ev);
+      openFromPriceElement(ev.target, ev);
     }, true);
   });
 })();
