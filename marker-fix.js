@@ -4,19 +4,36 @@
   const HIT_RADIUS = 38;
   let touchStart = null;
   let lastTouchOpen = 0;
+  let suppressMapCloseUntil = 0;
 
   function isPopupInteraction(target) {
     return Boolean(target?.closest?.('.leaflet-popup, .leaflet-popup-pane, .leaflet-control'));
   }
 
-  function openMarker(marker, ev) {
-    if (!marker?.getPopup?.()) return false;
+  function stopEvent(ev) {
     if (ev?.cancelable) ev.preventDefault();
     ev?.stopPropagation?.();
     ev?.stopImmediatePropagation?.();
+  }
+
+  function openMarker(marker, ev) {
+    if (!marker?.getPopup?.()) return false;
+    stopEvent(ev);
+    suppressMapCloseUntil = Date.now() + 900;
     try {
       marker.openPopup();
-      marker._map?.panInside(marker.getLatLng(), { padding: [45, 90], animate: true });
+      const map = marker._map;
+      if (map) {
+        map.panInside(marker.getLatLng(), { padding: [45, 90], animate: true });
+        // iOS/Leaflet can emit a synthetic map click after touchend. Re-open
+        // after that click so the first tap always leaves the popup visible.
+        setTimeout(() => {
+          if (marker._map && Date.now() < suppressMapCloseUntil) marker.openPopup();
+        }, 60);
+        setTimeout(() => {
+          if (marker._map && Date.now() < suppressMapCloseUntil) marker.openPopup();
+        }, 220);
+      }
       return true;
     } catch (_) { return false; }
   }
@@ -49,12 +66,12 @@
     icon.style.cursor = 'pointer';
     icon.setAttribute('role', 'button');
     icon.setAttribute('tabindex', '0');
-    if (icon.__carburantiTapV16) return;
-    icon.__carburantiTapV16 = true;
+    if (icon.__carburantiTapV17) return;
+    icon.__carburantiTapV17 = true;
     icon.addEventListener('click', ev => {
-      if (Date.now() - lastTouchOpen < 800) return;
+      if (Date.now() - lastTouchOpen < 800) { stopEvent(ev); return; }
       openMarker(marker, ev);
-    });
+    }, true);
     icon.addEventListener('keydown', ev => {
       if (ev.key === 'Enter' || ev.key === ' ') openMarker(marker, ev);
     });
@@ -64,20 +81,40 @@
     priceMarkers().forEach(bindMarker);
   }
 
+  function googleMapsUrl(link) {
+    const href = link?.getAttribute?.('href') || '';
+    try {
+      const url = new URL(href, location.href);
+      const destination = url.searchParams.get('destination');
+      if (destination) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
+    } catch (_) {}
+    return href;
+  }
+
   function protectPopupLinks() {
     document.querySelectorAll('.leaflet-popup a').forEach(link => {
-      if (link.__carburantiPopupLinkV16) return;
-      link.__carburantiPopupLinkV16 = true;
-      ['touchstart', 'touchend', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'].forEach(type => {
-        link.addEventListener(type, ev => ev.stopPropagation(), { passive: type !== 'touchend' });
+      if (link.__carburantiPopupLinkV17) return;
+      link.__carburantiPopupLinkV17 = true;
+      ['touchstart', 'pointerdown', 'mousedown'].forEach(type => {
+        link.addEventListener(type, ev => ev.stopPropagation(), { passive: true, capture: true });
       });
+      link.addEventListener('click', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation?.();
+        const url = googleMapsUrl(link);
+        if (!url) return;
+        // Direct top-level navigation is reliable in iOS Safari and installed PWAs;
+        // target=_blank/window.open can be blocked in standalone mode.
+        window.location.href = url;
+      }, true);
     });
   }
 
   function installMapHitTesting() {
     const mapEl = document.getElementById('map');
-    if (!mapEl || mapEl.__carburantiHitTestV16) return;
-    mapEl.__carburantiHitTestV16 = true;
+    if (!mapEl || mapEl.__carburantiHitTestV17) return;
+    mapEl.__carburantiHitTestV17 = true;
 
     mapEl.addEventListener('touchstart', ev => {
       if (isPopupInteraction(ev.target)) { touchStart = null; return; }
@@ -100,7 +137,11 @@
 
     mapEl.addEventListener('click', ev => {
       if (isPopupInteraction(ev.target)) return;
-      if (Date.now() - lastTouchOpen < 800) return;
+      if (Date.now() < suppressMapCloseUntil || Date.now() - lastTouchOpen < 800) {
+        ev.stopPropagation();
+        ev.stopImmediatePropagation?.();
+        return;
+      }
       const marker = nearestMarker(ev.clientX, ev.clientY);
       if (marker) openMarker(marker, ev);
     }, true);
@@ -109,14 +150,14 @@
   function installMarkerHook() {
     if (!window.L?.Marker) return;
     const proto = L.Marker.prototype;
-    if (proto.__carburantiTapV16) return;
+    if (proto.__carburantiTapV17) return;
     const originalOnAdd = proto.onAdd;
     proto.onAdd = function(map) {
       const result = originalOnAdd.call(this, map);
       bindMarker(this);
       return result;
     };
-    proto.__carburantiTapV16 = true;
+    proto.__carburantiTapV17 = true;
   }
 
   function parsePrice(text) {
@@ -152,6 +193,7 @@
     const best = document.getElementById('bestPrice');
     if (best) new MutationObserver(refresh).observe(best, { childList: true, subtree: true });
     document.getElementById('map')?.addEventListener('click', () => setTimeout(protectPopupLinks, 0));
+    document.getElementById('map')?.addEventListener('popupopen', () => setTimeout(protectPopupLinks, 0));
     let passes = 0;
     const timer = setInterval(() => {
       bindAllMarkers();
