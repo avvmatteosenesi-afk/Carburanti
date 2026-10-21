@@ -31,48 +31,6 @@
     });
   }
 
-  /*
-   * Leaflet normally handles marker taps itself, but iOS/PWA can lose the click on
-   * DivIcon price labels after a map gesture. Attach a native activation handler to
-   * every Leaflet Marker when its icon is mounted. This covers both the home map and
-   * the Viaggio map and does not depend on the main-map marker registry.
-   */
-  function installLeafletMarkerActivation() {
-    if (!window.L?.Marker || L.Marker.prototype.__carburantiTapPatched) return;
-    const proto = L.Marker.prototype;
-    const originalOnAdd = proto.onAdd;
-    proto.onAdd = function(map) {
-      const result = originalOnAdd.call(this, map);
-      const marker = this;
-      const icon = marker._icon;
-      if (!icon || icon.__carburantiTapBound) return result;
-      icon.__carburantiTapBound = true;
-
-      const activate = ev => {
-        if (!icon.classList.contains('price-marker-wrap') || !marker.getPopup?.()) return;
-        const now = Date.now();
-        if (marker.__carburantiLastTap && now - marker.__carburantiLastTap < 350) return;
-        marker.__carburantiLastTap = now;
-        if (ev.type !== 'click') {
-          ev.preventDefault();
-          ev.stopPropagation();
-        }
-        try {
-          marker.openPopup();
-          setTimeout(() => enhanceGoogleMapsLink(document), 0);
-        } catch (_) {}
-      };
-
-      icon.addEventListener('pointerup', activate, true);
-      icon.addEventListener('touchend', activate, { capture: true, passive: false });
-      icon.addEventListener('click', activate, true);
-      icon.setAttribute('role', 'button');
-      icon.setAttribute('aria-label', 'Apri dettagli distributore e indicazioni');
-      return result;
-    };
-    proto.__carburantiTapPatched = true;
-  }
-
   function installPopupEnhancement() {
     const attach = map => {
       if (!map || map.__carburantiPopupEnhanced) return;
@@ -88,8 +46,6 @@
   }
 
   function enhanceHome() {
-    installLeafletMarkerActivation();
-
     const tripBtn = document.getElementById('tripOpenBtn');
     const topActions = document.querySelector('.top-actions');
     const mapCard = document.querySelector('.map-card');
