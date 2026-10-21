@@ -1,10 +1,6 @@
 (() => {
   'use strict';
 
-  // Leaflet normally auto-pans when a popup opens. In this app every map
-  // moveend rebuilds all fuel markers, so auto-pan destroys the marker that
-  // owns the popup and makes the popup flash closed. Disable popup auto-pan
-  // globally before app.js creates any marker popups.
   if (window.L?.Popup?.prototype?.options) {
     L.Popup.prototype.options.autoPan = false;
   }
@@ -44,27 +40,32 @@
     marker.openPopup();
   }
 
-  // Let the popup's real anchor perform navigation itself. This keeps every
-  // tap inside the iOS user gesture and avoids the touchend/click double-fire
-  // that made only the first Google Maps navigation work in the PWA.
-  function preparePopupLink(target) {
-    const link = target?.closest?.('.leaflet-popup a');
+  function googleDestination(link) {
+    try {
+      return new URL(link.href, location.href).searchParams.get('destination');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function openGoogleMaps(ev) {
+    const link = ev.target?.closest?.('.leaflet-popup a');
     if (!link) return false;
-    link.removeAttribute('target');
-    link.removeAttribute('rel');
+    const destination = googleDestination(link);
+    if (!destination) return false;
+    stop(ev);
+    // Direct Google Maps iOS URL scheme: avoids standalone-PWA handling of
+    // universal HTTPS links, which can remain trapped in the web app.
+    window.location.href = `comgooglemaps://?daddr=${encodeURIComponent(destination)}&directionsmode=driving`;
     return true;
   }
 
-  document.addEventListener('touchstart', ev => {
-    preparePopupLink(ev.target);
-  }, { capture: true, passive: true });
-
-  document.addEventListener('pointerdown', ev => {
-    preparePopupLink(ev.target);
-  }, true);
+  document.addEventListener('touchend', ev => {
+    openGoogleMaps(ev);
+  }, { capture: true, passive: false });
 
   document.addEventListener('click', ev => {
-    preparePopupLink(ev.target);
+    openGoogleMaps(ev);
   }, true);
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -88,8 +89,6 @@
       if (marker) open(marker, ev);
     }, { capture: true, passive: false });
 
-    // Consume iOS's synthetic click generated after our handled marker touchend.
-    // Popup links are explicitly excluded so their native navigation is never blocked.
     mapEl.addEventListener('click', ev => {
       if (ev.target?.closest?.('.leaflet-popup')) return;
       if (Date.now() - lastTouchAt < 1200) {
