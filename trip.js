@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261022-5';
+  const VERSION = '20261022-6';
   const NATIONAL_DATA_URL = `data/stations-it.json?v=${VERSION}`;
   const ITALY_CENTER = [42.5, 12.5];
   const trip = { map:null, routeLayer:null, stationLayer:null, nationalStations:null, fromCoords:null, toCoords:null, userPos:null, active:false };
@@ -21,7 +21,34 @@
   function openTrip(){ trip.active=true; trip.userPos=window.CarburantiApp?.getUserPosition()||null; el.tripPanel.classList.remove('hidden'); el.tripPanel.setAttribute('aria-hidden','false'); initTripMap(); setTimeout(()=>trip.map.invalidateSize(),30); loadNationalData().catch(err=>{console.error(err);showMessage('Dati nazionali non disponibili. Riprova tra poco.');}); }
   function closeTrip(){ trip.active=false; el.tripPanel.classList.add('hidden'); el.tripPanel.setAttribute('aria-hidden','true'); }
   async function loadNationalData(){ if(trip.nationalStations)return trip.nationalStations; showMessage('Caricamento distributori italiani…'); const r=await fetch(NATIONAL_DATA_URL,{cache:'no-store'}); if(!r.ok)throw new Error(`HTTP ${r.status}`); const p=await r.json(); trip.nationalStations=Array.isArray(p.stations)?p.stations:[]; showMessage(`${trip.nationalStations.length.toLocaleString('it-IT')} distributori disponibili in Italia.`); return trip.nationalStations; }
-  async function geocode(text){ const q=text.trim(); if(!q)throw new Error('Inserisci una località'); const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&q=${encodeURIComponent(q)}`,{headers:{'Accept-Language':'it'}}); if(!r.ok)throw new Error('Servizio di ricerca località non disponibile'); const list=await r.json(); if(!Array.isArray(list)||!list.length)throw new Error(`Località non trovata: ${q}`); return {lat:Number(list[0].lat),lon:Number(list[0].lon),label:list[0].display_name||q}; }
+  async function geocode(text){
+    const q=text.trim(); if(!q)throw new Error('Inserisci una località');
+    // For a simple place name use Nominatim's structured city query. This prevents
+    // names such as "Lucca" from resolving to a street, hamlet or other namesake.
+    const simple=/^[\p{L}'’ .-]+$/u.test(q)&&!q.includes(',');
+    const params=new URLSearchParams({format:'jsonv2',limit:'5',countrycodes:'it',addressdetails:'1'});
+    if(simple){params.set('city',q);params.set('country','Italia');}
+    else params.set('q',q);
+    let r=await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`,{headers:{'Accept-Language':'it'}});
+    if(!r.ok)throw new Error('Servizio di ricerca località non disponibile');
+    let list=await r.json();
+    // Fallback for small municipalities that Nominatim does not classify in the city field.
+    if(simple&&(!Array.isArray(list)||!list.length)){
+      const fallback=new URLSearchParams({format:'jsonv2',limit:'10',countrycodes:'it',addressdetails:'1',featureType:'settlement',q:`${q}, Italia`});
+      r=await fetch(`https://nominatim.openstreetmap.org/search?${fallback.toString()}`,{headers:{'Accept-Language':'it'}});
+      if(!r.ok)throw new Error('Servizio di ricerca località non disponibile');
+      list=await r.json();
+    }
+    if(!Array.isArray(list)||!list.length)throw new Error(`Località non trovata: ${q}`);
+    const norm=s=>String(s||'').trim().toLocaleLowerCase('it-IT');
+    const wanted=norm(q);
+    const exact=list.find(x=>{
+      const a=x.address||{};
+      return [a.city,a.town,a.village,a.municipality,a.county,x.name].some(v=>norm(v)===wanted);
+    });
+    const hit=exact||list[0];
+    return {lat:Number(hit.lat),lon:Number(hit.lon),label:hit.display_name||q};
+  }
   async function resolveEndpoint(which){ if(which==='from'&&trip.fromCoords)return trip.fromCoords; if(which==='to'&&trip.toCoords)return trip.toCoords; const input=which==='from'?el.tripFrom:el.tripTo; const result=await geocode(input.value); if(which==='from')trip.fromCoords=result;else trip.toCoords=result; return result; }
   function setCurrentLocation(which){
     const existing=window.CarburantiApp?.getUserPosition();
@@ -40,52 +67,21 @@
   function distanceToPolylineKm(station,coords){ if(!coords||coords.length<2)return Infinity; const p=[station.lon,station.lat],refLat=station.lat; let min=Infinity; for(let i=1;i<coords.length;i++){const d=pointSegmentDistanceKm(p,coords[i-1],coords[i],refLat);if(d<min)min=d;if(min<0.08)break;} return min; }
   function distanceToSegmentsKm(station,segments){ let min=Infinity; for(const coords of segments||[]){ const d=distanceToPolylineKm(station,coords); if(d<min)min=d; if(min<0.08)break; } return min; }
   function stepCoords(step){ const c=step?.geometry?.coordinates; return Array.isArray(c)&&c.length>1?c:[]; }
-  function segmentedRoute(route){
-    const steps=(route.legs||[]).flatMap(l=>l.steps||[]);
-    const motorway=[],local=[];
-    for(const step of steps){
-      const c=stepCoords(step); if(c.length<2)continue;
-      const reduced=reduceRoutePoints(c,120);
-      // Keep every OSRM step as a separate polyline: never join disjoint motorway/local
-      // sections, otherwise an artificial straight bridge can admit stations from the wrong road.
-      (isMotorwayStep(step)?motorway:local).push(reduced);
-    }
-    return {motorway,local};
-  }
+  function segmentedRoute(route){ const steps=(route.legs||[]).flatMap(l=>l.steps||[]); const motorway=[],local=[]; for(const step of steps){ const c=stepCoords(step); if(c.length<2)continue; const reduced=reduceRoutePoints(c,120); (isMotorwayStep(step)?motorway:local).push(reduced); } return {motorway,local}; }
   function candidateAlongRoute(route,motorwayInfo){
-    const fuel=window.CarburantiApp?.getFuel()||'benzina';
-    const full=reduceRoutePoints(route.geometry.coordinates||[],420); if(full.length<2)return [];
-    const seg=segmentedRoute(route), lons=full.map(c=>c[0]),lats=full.map(c=>c[1]);
-    const padKm=2.7,latPad=padKm/111,midLat=(Math.min(...lats)+Math.max(...lats))/2,lonPad=padKm/(111*Math.max(.25,Math.cos(midLat*Math.PI/180)));
-    const bbox={minLat:Math.min(...lats)-latPad,maxLat:Math.max(...lats)+latPad,minLon:Math.min(...lons)-lonPad,maxLon:Math.max(...lons)+lonPad};
-    return trip.nationalStations.filter(s=>{
-      if(s.lat<bbox.minLat||s.lat>bbox.maxLat||s.lon<bbox.minLon||s.lon>bbox.maxLon)return false;
-      const p=Number(s.prices?.[fuel]?.price); return Number.isFinite(p)&&p>0;
-    }).map(s=>{
-      const motorwayDistanceKm=distanceToSegmentsKm(s,seg.motorway);
-      const localDistanceKm=distanceToSegmentsKm(s,seg.local);
-      const routeDistanceKm=Math.min(motorwayDistanceKm,localDistanceKm);
-      return {...s,motorwayDistanceKm,localDistanceKm,routeDistanceKm};
-    }).filter(s=>{
-      if(!motorwayInfo.significant)return s.routeDistanceKm<=2.5;
-      // Strict rule: while the route is on a motorway, only MIMIT stations identified
-      // as motorway stations can be shown. Ordinary stations are admitted only when
-      // their nearest route section is genuinely outside the motorway.
-      if(s.highway) return s.motorwayDistanceKm<=1.6 && s.motorwayDistanceKm<=s.localDistanceKm;
-      return s.localDistanceKm<=2.5 && s.localDistanceKm<s.motorwayDistanceKm;
-    }).sort((a,b)=>a.routeDistanceKm-b.routeDistanceKm);
+    const fuel=window.CarburantiApp?.getFuel()||'benzina'; const full=reduceRoutePoints(route.geometry.coordinates||[],420); if(full.length<2)return [];
+    const seg=segmentedRoute(route),lons=full.map(c=>c[0]),lats=full.map(c=>c[1]); const padKm=2.7,latPad=padKm/111,midLat=(Math.min(...lats)+Math.max(...lats))/2,lonPad=padKm/(111*Math.max(.25,Math.cos(midLat*Math.PI/180))); const bbox={minLat:Math.min(...lats)-latPad,maxLat:Math.max(...lats)+latPad,minLon:Math.min(...lons)-lonPad,maxLon:Math.max(...lons)+lonPad};
+    return trip.nationalStations.filter(s=>{if(s.lat<bbox.minLat||s.lat>bbox.maxLat||s.lon<bbox.minLon||s.lon>bbox.maxLon)return false;const p=Number(s.prices?.[fuel]?.price);return Number.isFinite(p)&&p>0;}).map(s=>{const motorwayDistanceKm=distanceToSegmentsKm(s,seg.motorway),localDistanceKm=distanceToSegmentsKm(s,seg.local),routeDistanceKm=Math.min(motorwayDistanceKm,localDistanceKm);return {...s,motorwayDistanceKm,localDistanceKm,routeDistanceKm};}).filter(s=>{if(!motorwayInfo.significant)return s.routeDistanceKm<=2.5;if(s.highway)return s.motorwayDistanceKm<=1.6&&s.motorwayDistanceKm<=s.localDistanceKm;return s.localDistanceKm<=2.5&&s.localDistanceKm<s.motorwayDistanceKm;}).sort((a,b)=>a.routeDistanceKm-b.routeDistanceKm);
   }
 
   function priceClass(price,min){const d=price-min;if(d<=.0005)return'best';if(d<=.0505)return'near';if(d<=.1005)return'good';return'normal';}
   function priceIcon(price,cls){return L.divIcon({className:'price-marker-wrap',html:`<div class="price-marker ${cls}">${price.toFixed(3)}</div>`,iconSize:[58,28],iconAnchor:[29,14],popupAnchor:[0,-13]});}
   function renderRoute(route,stations,motorwayInfo){
-    trip.routeLayer.clearLayers();trip.stationLayer.clearLayers(); const latLngs=route.geometry.coordinates.map(([lon,lat])=>[lat,lon]); const line=L.polyline(latLngs,{color:'#1267d6',weight:6,opacity:.88}).addTo(trip.routeLayer);
-    const fuel=window.CarburantiApp?.getFuel()||'benzina',prices=stations.map(s=>Number(s.prices?.[fuel]?.price)).filter(Number.isFinite),min=prices.length?Math.min(...prices):null,displayBounds=line.getBounds();
-    for(const station of stations){ if(Number.isFinite(station.lat)&&Number.isFinite(station.lon))displayBounds.extend([station.lat,station.lon]); const price=Number(station.prices?.[fuel]?.price);if(!Number.isFinite(price))continue; const cls=priceClass(price,min),mapsUrl=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${station.lat},${station.lon}`)}`; const popup=`<div class="popup-title">${window.CarburantiApp.escapeHtml(station.name||station.brand||'Distributore')}</div><div class="popup-price">${window.CarburantiApp.money(price)}</div><div class="popup-meta">${window.CarburantiApp.escapeHtml(station.address||'')}${station.city?` · ${window.CarburantiApp.escapeHtml(station.city)}`:''}<br>${station.highway?'Area/distributore autostradale':`A ${station.routeDistanceKm.toFixed(1)} km dal percorso`}<br><a href="${mapsUrl}" target="_blank" rel="noopener">Indicazioni</a></div>`; L.marker([station.lat,station.lon],{pane:'tripStations',icon:priceIcon(price,cls),riseOnHover:true}).bindPopup(popup,{maxWidth:280,autoPan:false}).addTo(trip.stationLayer); }
-    trip.map.invalidateSize();trip.map.fitBounds(displayBounds.pad(.04),{padding:[28,28],maxZoom:14,animate:false}); el.tripDistance.textContent=formatDistance(route.distance);el.tripDuration.textContent=formatDuration(route.duration);el.tripBest.textContent=min!==null?window.CarburantiApp.money(min):'—';el.tripSummary.classList.remove('hidden');
-    if(motorwayInfo.significant){const h=stations.filter(s=>s.highway).length,l=stations.length-h;showMessage(`${h} distributori autostradali sui tratti in autostrada; ${l} distributori ordinari sui soli tratti fuori autostrada.`);}else showMessage(`${stations.length} distributori entro circa 2,5 km dal percorso.`);
+    trip.routeLayer.clearLayers();trip.stationLayer.clearLayers();const latLngs=route.geometry.coordinates.map(([lon,lat])=>[lat,lon]);const line=L.polyline(latLngs,{color:'#1267d6',weight:6,opacity:.88}).addTo(trip.routeLayer);const fuel=window.CarburantiApp?.getFuel()||'benzina',prices=stations.map(s=>Number(s.prices?.[fuel]?.price)).filter(Number.isFinite),min=prices.length?Math.min(...prices):null,displayBounds=line.getBounds();
+    for(const station of stations){if(Number.isFinite(station.lat)&&Number.isFinite(station.lon))displayBounds.extend([station.lat,station.lon]);const price=Number(station.prices?.[fuel]?.price);if(!Number.isFinite(price))continue;const cls=priceClass(price,min),mapsUrl=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${station.lat},${station.lon}`)}`;const popup=`<div class="popup-title">${window.CarburantiApp.escapeHtml(station.name||station.brand||'Distributore')}</div><div class="popup-price">${window.CarburantiApp.money(price)}</div><div class="popup-meta">${window.CarburantiApp.escapeHtml(station.address||'')}${station.city?` · ${window.CarburantiApp.escapeHtml(station.city)}`:''}<br>${station.highway?'Area/distributore autostradale':`A ${station.routeDistanceKm.toFixed(1)} km dal percorso`}<br><a href="${mapsUrl}" target="_blank" rel="noopener">Indicazioni</a></div>`;L.marker([station.lat,station.lon],{pane:'tripStations',icon:priceIcon(price,cls),riseOnHover:true}).bindPopup(popup,{maxWidth:280,autoPan:false}).addTo(trip.stationLayer);}
+    trip.map.invalidateSize();trip.map.fitBounds(displayBounds.pad(.04),{padding:[28,28],maxZoom:14,animate:false});el.tripDistance.textContent=formatDistance(route.distance);el.tripDuration.textContent=formatDuration(route.duration);el.tripBest.textContent=min!==null?window.CarburantiApp.money(min):'—';el.tripSummary.classList.remove('hidden');if(motorwayInfo.significant){const h=stations.filter(s=>s.highway).length,l=stations.length-h;showMessage(`${h} distributori autostradali sui tratti in autostrada; ${l} distributori ordinari sui soli tratti fuori autostrada.`);}else showMessage(`${stations.length} distributori entro circa 2,5 km dal percorso.`);
   }
-  async function calculateTrip(){ el.tripGoBtn.disabled=true;el.tripGoBtn.textContent='Calcolo…'; try{await loadNationalData();showMessage('Ricerca località e calcolo del percorso…');const[from,to]=await Promise.all([resolveEndpoint('from'),resolveEndpoint('to')]);const route=await getRoute(from,to),info=routeMotorwayInfo(route);showMessage(info.significant?'Autostrada rilevata: separo rigorosamente autostrada e viabilità ordinaria…':'Ricerca distributori vicini al percorso…');const stations=candidateAlongRoute(route,info);renderRoute(route,stations,info);}catch(err){console.error(err);showMessage(err.message||'Impossibile calcolare il viaggio.');}finally{el.tripGoBtn.disabled=false;el.tripGoBtn.textContent='Calcola percorso';} }
-  function bind(){ Object.assign(el,{tripOpenBtn:qs('tripOpenBtn'),tripPanel:qs('tripPanel'),tripCloseBtn:qs('tripCloseBtn'),tripEndBtn:qs('tripEndBtn'),tripFrom:qs('tripFrom'),tripTo:qs('tripTo'),tripFromLocation:qs('tripFromLocation'),tripToLocation:qs('tripToLocation'),tripGoBtn:qs('tripGoBtn'),tripSummary:qs('tripSummary'),tripDistance:qs('tripDistance'),tripDuration:qs('tripDuration'),tripBest:qs('tripBest'),tripMessage:qs('tripMessage')}); el.tripOpenBtn.addEventListener('click',openTrip);el.tripCloseBtn.addEventListener('click',closeTrip);el.tripEndBtn.addEventListener('click',closeTrip);el.tripFromLocation.addEventListener('click',()=>setCurrentLocation('from'));el.tripToLocation.addEventListener('click',()=>setCurrentLocation('to'));el.tripFrom.addEventListener('input',()=>resetCoordOnInput('from'));el.tripTo.addEventListener('input',()=>resetCoordOnInput('to'));el.tripGoBtn.addEventListener('click',calculateTrip);[el.tripFrom,el.tripTo].forEach(input=>input.addEventListener('keydown',ev=>{if(ev.key==='Enter')calculateTrip();})); }
+  async function calculateTrip(){el.tripGoBtn.disabled=true;el.tripGoBtn.textContent='Calcolo…';try{await loadNationalData();showMessage('Ricerca località e calcolo del percorso…');const[from,to]=await Promise.all([resolveEndpoint('from'),resolveEndpoint('to')]);const route=await getRoute(from,to),info=routeMotorwayInfo(route);showMessage(info.significant?'Autostrada rilevata: separo rigorosamente autostrada e viabilità ordinaria…':'Ricerca distributori vicini al percorso…');const stations=candidateAlongRoute(route,info);renderRoute(route,stations,info);}catch(err){console.error(err);showMessage(err.message||'Impossibile calcolare il viaggio.');}finally{el.tripGoBtn.disabled=false;el.tripGoBtn.textContent='Calcola percorso';}}
+  function bind(){Object.assign(el,{tripOpenBtn:qs('tripOpenBtn'),tripPanel:qs('tripPanel'),tripCloseBtn:qs('tripCloseBtn'),tripEndBtn:qs('tripEndBtn'),tripFrom:qs('tripFrom'),tripTo:qs('tripTo'),tripFromLocation:qs('tripFromLocation'),tripToLocation:qs('tripToLocation'),tripGoBtn:qs('tripGoBtn'),tripSummary:qs('tripSummary'),tripDistance:qs('tripDistance'),tripDuration:qs('tripDuration'),tripBest:qs('tripBest'),tripMessage:qs('tripMessage')});el.tripOpenBtn.addEventListener('click',openTrip);el.tripCloseBtn.addEventListener('click',closeTrip);el.tripEndBtn.addEventListener('click',closeTrip);el.tripFromLocation.addEventListener('click',()=>setCurrentLocation('from'));el.tripToLocation.addEventListener('click',()=>setCurrentLocation('to'));el.tripFrom.addEventListener('input',()=>resetCoordOnInput('from'));el.tripTo.addEventListener('input',()=>resetCoordOnInput('to'));el.tripGoBtn.addEventListener('click',calculateTrip);[el.tripFrom,el.tripTo].forEach(input=>input.addEventListener('keydown',ev=>{if(ev.key==='Enter')calculateTrip();}));}
   document.addEventListener('DOMContentLoaded',bind);
 })();
