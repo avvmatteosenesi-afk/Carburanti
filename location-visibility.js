@@ -8,14 +8,52 @@
   function emphasizeUserPane() {
     const app = window.CarburantiApp;
     const pane = app?.state?.map?.getPane?.('userPane');
-    if (pane) pane.style.zIndex = '700';
+    if (pane) {
+      pane.style.zIndex = '900';
+      pane.style.pointerEvents = 'none';
+    }
+  }
+
+  function redrawUserDot() {
+    const app = window.CarburantiApp;
+    const pos = app?.getUserPosition?.();
+    const layer = app?.state?.userLayer;
+    if (!pos || !layer || !window.L) return false;
+
+    layer.clearLayers();
+    const icon = L.divIcon({
+      className: '',
+      html: '<div class="user-location"></div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    L.marker([pos.lat, pos.lon], {
+      pane: 'userPane',
+      icon,
+      zIndexOffset: 10000,
+      interactive: false
+    }).addTo(layer);
+    L.circle([pos.lat, pos.lon], {
+      pane: 'userPane',
+      radius: 10000,
+      interactive: false,
+      weight: 1,
+      opacity: 0.38,
+      fillOpacity: 0.025
+    }).addTo(layer);
+    emphasizeUserPane();
+    return true;
   }
 
   function ensureLocation() {
     const app = window.CarburantiApp;
     if (!appReady()) return false;
     emphasizeUserPane();
-    if (!app.getUserPosition?.() && !app.state.locating) app.locateUser?.(false, { quiet: true });
+    if (app.getUserPosition?.()) {
+      redrawUserDot();
+    } else if (!app.state.locating) {
+      app.locateUser?.(false, { quiet: true });
+    }
     return true;
   }
 
@@ -28,6 +66,7 @@
 
     window.addEventListener('carburanti:location', () => {
       emphasizeUserPane();
+      redrawUserDot();
       const app = window.CarburantiApp;
       const zone = document.getElementById('zoneSelect')?.value;
       if (zone === 'position') {
@@ -36,6 +75,8 @@
           app.state.programmaticMove = true;
           app.state.map.invalidateSize(false);
           app.state.map.setView([pos.lat, pos.lon], 13, { animate: false });
+          setTimeout(redrawUserDot, 50);
+          setTimeout(redrawUserDot, 300);
         }
       }
     });
@@ -44,7 +85,8 @@
       setTimeout(() => {
         emphasizeUserPane();
         const app = window.CarburantiApp;
-        if (!app?.getUserPosition?.() && !app?.state?.locating) app?.locateUser?.(false, { quiet: true });
+        if (app?.getUserPosition?.()) redrawUserDot();
+        else if (!app?.state?.locating) app?.locateUser?.(false, { quiet: true });
       }, 120);
     });
 
