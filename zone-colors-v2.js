@@ -12,18 +12,23 @@
   }
 
   function recolor() {
-    const min = parsePrice(document.getElementById('bestPrice')?.textContent);
+    const markers = Array.from(document.querySelectorAll('#map .price-marker'));
+    const markerPrices = markers.map(el => parsePrice(el.textContent)).filter(Number.isFinite);
+    const cardMin = parsePrice(document.getElementById('bestPrice')?.textContent);
+    const min = Number.isFinite(cardMin) ? cardMin : (markerPrices.length ? Math.min(...markerPrices) : null);
     if (!Number.isFinite(min)) return;
+
     const wide = wideZone();
     const nearLimit = wide ? 0.1005 : 0.0505;
     const goodLimit = wide ? 0.2005 : 0.1005;
-    document.querySelectorAll('#map .price-marker').forEach(el => {
+    markers.forEach(el => {
       const price = parsePrice(el.textContent);
       if (!Number.isFinite(price)) return;
       const d = price - min;
       const cls = d <= 0.0005 ? 'best' : d <= nearLimit ? 'near' : d <= goodLimit ? 'good' : 'normal';
       ['best','near','good','normal'].forEach(c => el.classList.toggle(c, c === cls));
     });
+
     const legend = document.querySelector('.controls-card .legend');
     if (legend) {
       const spans = legend.querySelectorAll('span');
@@ -40,7 +45,11 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('zoneSelect')?.addEventListener('change', () => setTimeout(queue, 0));
+    document.getElementById('zoneSelect')?.addEventListener('change', () => {
+      setTimeout(queue, 0);
+      setTimeout(queue, 150);
+      setTimeout(queue, 500);
+    });
     new MutationObserver(queue).observe(document.getElementById('map'), { childList: true, subtree: true });
     new MutationObserver(queue).observe(document.getElementById('bestPrice'), { childList: true, characterData: true, subtree: true });
     setTimeout(queue, 500);
