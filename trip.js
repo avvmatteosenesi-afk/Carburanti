@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261021-4';
+  const VERSION = '20261022-5';
   const NATIONAL_DATA_URL = `data/stations-it.json?v=${VERSION}`;
   const ITALY_CENTER = [42.5, 12.5];
   const trip = { map:null, routeLayer:null, stationLayer:null, nationalStations:null, fromCoords:null, toCoords:null, userPos:null, active:false };
@@ -38,12 +38,19 @@
   function localXY(lat,lon,refLat){return [lon*111.32*Math.cos(refLat*Math.PI/180),lat*111.32];}
   function pointSegmentDistanceKm(p,a,b,refLat){ const [px,py]=localXY(p[1],p[0],refLat),[ax,ay]=localXY(a[1],a[0],refLat),[bx,by]=localXY(b[1],b[0],refLat); const dx=bx-ax,dy=by-ay; if(dx===0&&dy===0)return Math.hypot(px-ax,py-ay); let t=((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy); t=Math.max(0,Math.min(1,t)); return Math.hypot(px-(ax+t*dx),py-(ay+t*dy)); }
   function distanceToPolylineKm(station,coords){ if(!coords||coords.length<2)return Infinity; const p=[station.lon,station.lat],refLat=station.lat; let min=Infinity; for(let i=1;i<coords.length;i++){const d=pointSegmentDistanceKm(p,coords[i-1],coords[i],refLat);if(d<min)min=d;if(min<0.08)break;} return min; }
+  function distanceToSegmentsKm(station,segments){ let min=Infinity; for(const coords of segments||[]){ const d=distanceToPolylineKm(station,coords); if(d<min)min=d; if(min<0.08)break; } return min; }
   function stepCoords(step){ const c=step?.geometry?.coordinates; return Array.isArray(c)&&c.length>1?c:[]; }
   function segmentedRoute(route){
     const steps=(route.legs||[]).flatMap(l=>l.steps||[]);
     const motorway=[],local=[];
-    for(const step of steps){ const c=stepCoords(step); if(c.length<2)continue; (isMotorwayStep(step)?motorway:local).push(...c); }
-    return {motorway:reduceRoutePoints(motorway,420),local:reduceRoutePoints(local,420)};
+    for(const step of steps){
+      const c=stepCoords(step); if(c.length<2)continue;
+      const reduced=reduceRoutePoints(c,120);
+      // Keep every OSRM step as a separate polyline: never join disjoint motorway/local
+      // sections, otherwise an artificial straight bridge can admit stations from the wrong road.
+      (isMotorwayStep(step)?motorway:local).push(reduced);
+    }
+    return {motorway,local};
   }
   function candidateAlongRoute(route,motorwayInfo){
     const fuel=window.CarburantiApp?.getFuel()||'benzina';
@@ -55,15 +62,16 @@
       if(s.lat<bbox.minLat||s.lat>bbox.maxLat||s.lon<bbox.minLon||s.lon>bbox.maxLon)return false;
       const p=Number(s.prices?.[fuel]?.price); return Number.isFinite(p)&&p>0;
     }).map(s=>{
-      const motorwayDistanceKm=distanceToPolylineKm(s,seg.motorway);
-      const localDistanceKm=distanceToPolylineKm(s,seg.local);
+      const motorwayDistanceKm=distanceToSegmentsKm(s,seg.motorway);
+      const localDistanceKm=distanceToSegmentsKm(s,seg.local);
       const routeDistanceKm=Math.min(motorwayDistanceKm,localDistanceKm);
       return {...s,motorwayDistanceKm,localDistanceKm,routeDistanceKm};
     }).filter(s=>{
       if(!motorwayInfo.significant)return s.routeDistanceKm<=2.5;
-      // On motorway sections only motorway service stations are admitted.
+      // Strict rule: while the route is on a motorway, only MIMIT stations identified
+      // as motorway stations can be shown. Ordinary stations are admitted only when
+      // their nearest route section is genuinely outside the motorway.
       if(s.highway) return s.motorwayDistanceKm<=1.6 && s.motorwayDistanceKm<=s.localDistanceKm;
-      // Before entry and after exit (and any genuine local-road section), show local stations.
       return s.localDistanceKm<=2.5 && s.localDistanceKm<s.motorwayDistanceKm;
     }).sort((a,b)=>a.routeDistanceKm-b.routeDistanceKm);
   }
@@ -75,9 +83,9 @@
     const fuel=window.CarburantiApp?.getFuel()||'benzina',prices=stations.map(s=>Number(s.prices?.[fuel]?.price)).filter(Number.isFinite),min=prices.length?Math.min(...prices):null,displayBounds=line.getBounds();
     for(const station of stations){ if(Number.isFinite(station.lat)&&Number.isFinite(station.lon))displayBounds.extend([station.lat,station.lon]); const price=Number(station.prices?.[fuel]?.price);if(!Number.isFinite(price))continue; const cls=priceClass(price,min),mapsUrl=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${station.lat},${station.lon}`)}`; const popup=`<div class="popup-title">${window.CarburantiApp.escapeHtml(station.name||station.brand||'Distributore')}</div><div class="popup-price">${window.CarburantiApp.money(price)}</div><div class="popup-meta">${window.CarburantiApp.escapeHtml(station.address||'')}${station.city?` · ${window.CarburantiApp.escapeHtml(station.city)}`:''}<br>${station.highway?'Area/distributore autostradale':`A ${station.routeDistanceKm.toFixed(1)} km dal percorso`}<br><a href="${mapsUrl}" target="_blank" rel="noopener">Indicazioni</a></div>`; L.marker([station.lat,station.lon],{pane:'tripStations',icon:priceIcon(price,cls),riseOnHover:true}).bindPopup(popup,{maxWidth:280,autoPan:false}).addTo(trip.stationLayer); }
     trip.map.invalidateSize();trip.map.fitBounds(displayBounds.pad(.04),{padding:[28,28],maxZoom:14,animate:false}); el.tripDistance.textContent=formatDistance(route.distance);el.tripDuration.textContent=formatDuration(route.duration);el.tripBest.textContent=min!==null?window.CarburantiApp.money(min):'—';el.tripSummary.classList.remove('hidden');
-    if(motorwayInfo.significant){const h=stations.filter(s=>s.highway).length,l=stations.length-h;showMessage(`${h} distributori autostradali tra ingresso e uscita; ${l} distributori di zona nei tratti prima/dopo l’autostrada.`);}else showMessage(`${stations.length} distributori entro circa 2,5 km dal percorso.`);
+    if(motorwayInfo.significant){const h=stations.filter(s=>s.highway).length,l=stations.length-h;showMessage(`${h} distributori autostradali sui tratti in autostrada; ${l} distributori ordinari sui soli tratti fuori autostrada.`);}else showMessage(`${stations.length} distributori entro circa 2,5 km dal percorso.`);
   }
-  async function calculateTrip(){ el.tripGoBtn.disabled=true;el.tripGoBtn.textContent='Calcolo…'; try{await loadNationalData();showMessage('Ricerca località e calcolo del percorso…');const[from,to]=await Promise.all([resolveEndpoint('from'),resolveEndpoint('to')]);const route=await getRoute(from,to),info=routeMotorwayInfo(route);showMessage(info.significant?'Autostrada rilevata: separo tratti autostradali e viabilità ordinaria…':'Ricerca distributori vicini al percorso…');const stations=candidateAlongRoute(route,info);renderRoute(route,stations,info);}catch(err){console.error(err);showMessage(err.message||'Impossibile calcolare il viaggio.');}finally{el.tripGoBtn.disabled=false;el.tripGoBtn.textContent='Calcola percorso';} }
+  async function calculateTrip(){ el.tripGoBtn.disabled=true;el.tripGoBtn.textContent='Calcolo…'; try{await loadNationalData();showMessage('Ricerca località e calcolo del percorso…');const[from,to]=await Promise.all([resolveEndpoint('from'),resolveEndpoint('to')]);const route=await getRoute(from,to),info=routeMotorwayInfo(route);showMessage(info.significant?'Autostrada rilevata: separo rigorosamente autostrada e viabilità ordinaria…':'Ricerca distributori vicini al percorso…');const stations=candidateAlongRoute(route,info);renderRoute(route,stations,info);}catch(err){console.error(err);showMessage(err.message||'Impossibile calcolare il viaggio.');}finally{el.tripGoBtn.disabled=false;el.tripGoBtn.textContent='Calcola percorso';} }
   function bind(){ Object.assign(el,{tripOpenBtn:qs('tripOpenBtn'),tripPanel:qs('tripPanel'),tripCloseBtn:qs('tripCloseBtn'),tripEndBtn:qs('tripEndBtn'),tripFrom:qs('tripFrom'),tripTo:qs('tripTo'),tripFromLocation:qs('tripFromLocation'),tripToLocation:qs('tripToLocation'),tripGoBtn:qs('tripGoBtn'),tripSummary:qs('tripSummary'),tripDistance:qs('tripDistance'),tripDuration:qs('tripDuration'),tripBest:qs('tripBest'),tripMessage:qs('tripMessage')}); el.tripOpenBtn.addEventListener('click',openTrip);el.tripCloseBtn.addEventListener('click',closeTrip);el.tripEndBtn.addEventListener('click',closeTrip);el.tripFromLocation.addEventListener('click',()=>setCurrentLocation('from'));el.tripToLocation.addEventListener('click',()=>setCurrentLocation('to'));el.tripFrom.addEventListener('input',()=>resetCoordOnInput('from'));el.tripTo.addEventListener('input',()=>resetCoordOnInput('to'));el.tripGoBtn.addEventListener('click',calculateTrip);[el.tripFrom,el.tripTo].forEach(input=>input.addEventListener('keydown',ev=>{if(ev.key==='Enter')calculateTrip();})); }
   document.addEventListener('DOMContentLoaded',bind);
 })();
