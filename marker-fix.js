@@ -5,8 +5,8 @@
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV22) return;
-    root.__carburantiProtectedV22 = true;
+    if (!root || root.__carburantiProtectedV23) return;
+    root.__carburantiProtectedV23 = true;
     root.style.pointerEvents = 'auto';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
@@ -22,10 +22,6 @@
   function preparePopup(marker) {
     const popup = marker?.getPopup?.();
     if (!popup) return null;
-    // Root cause of the first-tap close: Leaflet auto-pans the map when the
-    // popup first opens; map moveend then calls renderStations(), which clears
-    // the marker layer and destroys the just-opened popup. The second tap works
-    // only because the map has already been panned. Disable that auto-pan.
     popup.options.autoPan = false;
     popup.options.keepInView = false;
     popup.options.closeOnClick = false;
@@ -49,7 +45,6 @@
     ev?.stopPropagation?.();
     ev?.stopImmediatePropagation?.();
     suppressClickUntil = Date.now() + 1200;
-
     const popup = preparePopup(marker);
     try { marker._map?.closePopup(); } catch (_) {}
     marker.openPopup();
@@ -65,8 +60,7 @@
 
   function attachToMap() {
     const map = window.CarburantiApp?.state?.map;
-    if (!map || map.__carburantiPopupV22) return Boolean(map);
-    map.__carburantiPopupV22 = true;
+    if (!map) return false;
     map.options.closePopupOnClick = false;
     const popupPane = map.getPane?.('popupPane');
     if (popupPane) {
@@ -77,7 +71,10 @@
     if (stationPane) stationPane.style.pointerEvents = 'auto';
     const userPane = map.getPane?.('userPane');
     if (userPane) userPane.style.zIndex = '500';
-    map.on('popupopen', e => protectPopup(e.popup));
+    if (!map.__carburantiPopupV23) {
+      map.__carburantiPopupV23 = true;
+      map.on('popupopen', e => protectPopup(e.popup));
+    }
     return true;
   }
 
@@ -85,17 +82,27 @@
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
 
-    let tries = 0;
-    const timer = setInterval(() => {
-      const attached = attachToMap();
+    // Do not stop after initial load: Mia zona/GPS, zone, zoom and fuel changes
+    // clear and rebuild the Leaflet marker registry. Re-prepare every generation.
+    const refresh = () => {
+      attachToMap();
       prepareAllMarkers();
-      if ((attached && window.CarburantiApp?.state?.loaded) || ++tries > 100) clearInterval(timer);
-    }, 100);
+    };
+    const timer = setInterval(refresh, 250);
+    window.addEventListener('beforeunload', () => clearInterval(timer), { once: true });
 
-    // New markers are recreated after zoom/pan/fuel/zone changes; ensure their
-    // popup options are corrected before any native Leaflet click can open them.
-    const observer = new MutationObserver(() => prepareAllMarkers());
+    const observer = new MutationObserver(refresh);
     observer.observe(mapEl, { childList: true, subtree: true });
+    window.addEventListener('carburanti:location', () => {
+      requestAnimationFrame(refresh);
+      setTimeout(refresh, 100);
+      setTimeout(refresh, 350);
+    });
+    document.getElementById('zoneSelect')?.addEventListener('change', () => {
+      requestAnimationFrame(refresh);
+      setTimeout(refresh, 100);
+      setTimeout(refresh, 350);
+    });
 
     mapEl.addEventListener('pointerdown', ev => {
       const marker = markerForElement(ev.target);
