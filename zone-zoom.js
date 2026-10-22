@@ -25,7 +25,24 @@
     'agliana-prato': { bounds: [[43.84, 10.96], [43.93, 11.14]], maxZoom: 13 }
   };
 
-  function fit(map, bounds, maxZoom, padding = [18, 18], tighten = true) {
+  function stationBoundsForZone(app, zone) {
+    const stations = app?.state?.stations;
+    if (!Array.isArray(stations) || !stations.length) return null;
+    let list = [];
+    if (zone.startsWith('province:')) {
+      const code = zone.split(':')[1];
+      list = stations.filter(s => s.province === code && Number.isFinite(s.lat) && Number.isFinite(s.lon));
+    } else if (zone.startsWith('quick:')) {
+      const q = QUICK[zone.split(':')[1]];
+      if (!q) return null;
+      const area = L.latLngBounds(q.bounds);
+      list = stations.filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon) && area.contains([s.lat, s.lon]));
+    }
+    if (!list.length) return null;
+    return L.latLngBounds(list.map(s => [s.lat, s.lon]));
+  }
+
+  function fit(map, bounds, maxZoom, padding = [22, 22], tighten = false) {
     const b = L.latLngBounds(bounds);
     if (!b.isValid()) return false;
     map.invalidateSize(false);
@@ -50,13 +67,14 @@
       return true;
     }
 
-    if (zone === 'tuscany') return fit(map, TUSCANY_BOUNDS, 10, [16,16]);
+    if (zone === 'tuscany') return fit(map, TUSCANY_BOUNDS, 9, [22,22], false);
 
     if (zone.startsWith('province:')) {
-      const p = PROVINCES[zone.split(':')[1]];
+      const code = zone.split(':')[1];
+      const p = PROVINCES[code];
       if (!p) return false;
-      // Use a stable geographic centre instead of station extrema, which can
-      // shift the viewport toward outliers and make a province look off-centre.
+      const stationBounds = stationBoundsForZone(app, zone);
+      if (stationBounds?.isValid()) return fit(map, stationBounds.pad(0.04), p.zoom, [24,24], false);
       map.invalidateSize(false);
       map.setView(p.center, p.zoom, { animate:false });
       return true;
@@ -64,12 +82,13 @@
 
     if (zone.startsWith('quick:')) {
       const q = QUICK[zone.split(':')[1]];
-      return q ? fit(map, q.bounds, q.maxZoom, [18,18]) : false;
+      if (!q) return false;
+      const stationBounds = stationBoundsForZone(app, zone);
+      return fit(map, stationBounds?.isValid() ? stationBounds.pad(0.06) : q.bounds, q.maxZoom, [24,24], false);
     }
 
     if (zone === 'free') {
       map.invalidateSize(false);
-      if (map.getZoom() < 15) map.setZoom(map.getZoom() + 1, { animate:false });
       return true;
     }
     return false;
