@@ -5,8 +5,8 @@
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV23) return;
-    root.__carburantiProtectedV23 = true;
+    if (!root || root.__carburantiProtectedV24) return;
+    root.__carburantiProtectedV24 = true;
     root.style.pointerEvents = 'auto';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
@@ -70,9 +70,13 @@
     const stationPane = map.getPane?.('stationPane');
     if (stationPane) stationPane.style.pointerEvents = 'auto';
     const userPane = map.getPane?.('userPane');
-    if (userPane) userPane.style.zIndex = '500';
-    if (!map.__carburantiPopupV23) {
-      map.__carburantiPopupV23 = true;
+    if (userPane) {
+      // Keep the GPS dot above price markers, but never let it steal taps from them.
+      userPane.style.zIndex = '800';
+      userPane.style.pointerEvents = 'none';
+    }
+    if (!map.__carburantiPopupV24) {
+      map.__carburantiPopupV24 = true;
       map.on('popupopen', e => protectPopup(e.popup));
     }
     return true;
@@ -82,8 +86,6 @@
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
 
-    // Do not stop after initial load: Mia zona/GPS, zone, zoom and fuel changes
-    // clear and rebuild the Leaflet marker registry. Re-prepare every generation.
     const refresh = () => {
       attachToMap();
       prepareAllMarkers();
