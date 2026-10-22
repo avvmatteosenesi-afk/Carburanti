@@ -8,7 +8,8 @@
 
   function wideZone() {
     const zone = document.getElementById('zoneSelect')?.value || '';
-    return zone.startsWith('province:') || zone === 'tuscany';
+    return zone.startsWith('province:') || zone === 'tuscany' ||
+      zone === 'quick:prato-firenze' || zone === 'quick:pistoia-firenze';
   }
 
   function recolor() {
