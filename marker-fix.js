@@ -5,8 +5,8 @@
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV24) return;
-    root.__carburantiProtectedV24 = true;
+    if (!root || root.__carburantiProtectedV25) return;
+    root.__carburantiProtectedV25 = true;
     root.style.pointerEvents = 'auto';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
@@ -38,13 +38,44 @@
     return Array.from(registry.values()).find(m => (m.getElement?.() || m._icon) === wrap) || null;
   }
 
+  function markerId(marker) {
+    const registry = window.CarburantiApp?.state?.markerById;
+    if (!registry?.entries) return null;
+    const found = Array.from(registry.entries()).find(([, m]) => m === marker);
+    return found ? found[0] : null;
+  }
+
+  function centerOnMarker(marker) {
+    const app = window.CarburantiApp;
+    const state = app?.state;
+    const map = marker?._map || state?.map;
+    const latlng = marker?.getLatLng?.();
+    if (!map || !latlng) return marker;
+
+    const id = markerId(marker);
+    try {
+      const center = map.getCenter();
+      const needsMove = !center || Math.abs(center.lat - latlng.lat) > 1e-7 || Math.abs(center.lng - latlng.lng) > 1e-7;
+      if (needsMove) {
+        if (state) state.programmaticMove = true;
+        map.setView(latlng, map.getZoom(), { animate: false });
+      }
+    } catch (_) {}
+
+    return id && state?.markerById?.get ? (state.markerById.get(id) || marker) : marker;
+  }
+
   function openFromPriceElement(target, ev) {
-    const marker = markerForElement(target);
+    let marker = markerForElement(target);
     if (!marker) return false;
     if (ev?.cancelable) ev.preventDefault();
     ev?.stopPropagation?.();
     ev?.stopImmediatePropagation?.();
     suppressClickUntil = Date.now() + 1200;
+
+    // Centra prima la mappa sul distributore. Il setView può rigenerare i marker
+    // tramite il normale moveend dell'app, quindi recuperiamo poi il marker attivo.
+    marker = centerOnMarker(marker);
     const popup = preparePopup(marker);
     try { marker._map?.closePopup(); } catch (_) {}
     marker.openPopup();
@@ -75,8 +106,8 @@
       userPane.style.zIndex = '800';
       userPane.style.pointerEvents = 'none';
     }
-    if (!map.__carburantiPopupV24) {
-      map.__carburantiPopupV24 = true;
+    if (!map.__carburantiPopupV25) {
+      map.__carburantiPopupV25 = true;
       map.on('popupopen', e => protectPopup(e.popup));
     }
     return true;
