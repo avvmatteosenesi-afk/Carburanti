@@ -1,0 +1,25 @@
+(() => {
+'use strict';
+const V='20261024-2', FKEY='carburanti:favorites:v1', PKEY='carburanti:last-position:v1';
+let stations=[];
+const $=s=>document.querySelector(s);
+const fuel=()=>$('.fuel-tab.active')?.dataset.fuel||'benzina';
+const price=(s,f=fuel())=>Number(s?.prices?.[f]?.price)||null;
+const km=(a,b)=>{const r=Math.PI/180,R=6371,d1=(b.lat-a.lat)*r,d2=(b.lon-a.lon)*r,x=Math.sin(d1/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(d2/2)**2;return 2*R*Math.asin(Math.sqrt(x));};
+const favs=()=>{try{return JSON.parse(localStorage.getItem(FKEY)||'[]')}catch{return[]}};
+const save=a=>localStorage.setItem(FKEY,JSON.stringify(a));
+function pos(){try{const p=JSON.parse(localStorage.getItem(PKEY)||'null');return p&&Number.isFinite(p.lat)&&Number.isFinite(p.lon)?p:null}catch{return null}}
+function ensureUI(){
+ if($('#smartFuelPanel'))return;
+ const card=document.createElement('section'); card.id='smartFuelPanel'; card.className='smart-fuel-card';
+ card.innerHTML='<div class="smart-head"><strong>Scelte rapide</strong><button id="favToggle" type="button">★ Preferiti</button></div><div id="smartRanking"></div><div id="favList" class="hidden"></div>';
+ $('.controls-card')?.after(card);
+ $('#favToggle')?.addEventListener('click',()=>{$('#favList').classList.toggle('hidden');renderFavs();});
+}
+function focus(s){const z=$('#zoneSelect'); if(z&&z.value!=='free'){z.value='free';z.dispatchEvent(new Event('change',{bubbles:true}));} setTimeout(()=>{const map=window.__carburantiMap;if(map)map.setView([s.lat,s.lon],16);},80);}
+function renderFavs(){const box=$('#favList');if(!box)return;const ids=new Set(favs().map(String)),list=stations.filter(s=>ids.has(String(s.id)));box.innerHTML=list.length?'<div class="smart-title">Preferiti</div>'+list.map(s=>`<button class="smart-row" data-id="${s.id}"><span>${s.name||s.brand||'Distributore'}<small>${s.city||s.address||''}</small></span><b>${price(s)?price(s).toFixed(3)+' €':'—'}</b></button>`).join(''):'<div class="smart-empty">Nessun distributore preferito.</div>';box.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{const s=stations.find(x=>String(x.id)===b.dataset.id);if(s)focus(s)});}
+function renderRank(){const box=$('#smartRanking'),z=$('#zoneSelect');if(!box||!z)return;if(z.value!=='position'){box.innerHTML='<span class="smart-hint">La classifica compare in “Mia zona”.</span>';return;}const p=pos();if(!p){box.innerHTML='<span class="smart-hint">Usa “Mia posizione” per calcolare le scelte migliori.</span>';return;}const f=fuel(),near=stations.map(s=>({s,p:price(s,f),d:km(p,s)})).filter(x=>x.p&&x.d<=10);if(!near.length){box.innerHTML='<span class="smart-hint">Nessun prezzo disponibile entro 10 km.</span>';return;}const cheap=[...near].sort((a,b)=>a.p-b.p)[0],close=[...near].sort((a,b)=>a.d-b.d)[0];const min=cheap.p;const balance=[...near].sort((a,b)=>(a.p-min)*20+a.d*.035-((b.p-min)*20+b.d*.035))[0];const rows=[['Più economico',cheap],['Più vicino',close],['Miglior compromesso',balance]];box.innerHTML=rows.map(([l,x])=>`<button class="smart-row" data-id="${x.s.id}"><span><em>${l}</em>${x.s.name||x.s.brand||'Distributore'}<small>${x.d.toFixed(1)} km</small></span><b>${x.p.toFixed(3)} €</b></button>`).join('');box.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{const s=stations.find(x=>String(x.id)===b.dataset.id);if(s)focus(s)});}
+function enhancePopup(){document.querySelectorAll('.leaflet-popup-content').forEach(p=>{if(p.querySelector('.fav-btn'))return;const a=p.querySelector('a[href*="destination="]');if(!a)return;let dest='';try{dest=new URL(a.href).searchParams.get('destination')||''}catch{}const [la,lo]=dest.split(',').map(Number);const s=stations.find(x=>Math.abs(x.lat-la)<1e-5&&Math.abs(x.lon-lo)<1e-5);if(!s)return;const b=document.createElement('button');b.type='button';b.className='fav-btn';const set=()=>b.textContent=favs().map(String).includes(String(s.id))?'★ Preferito':'☆ Aggiungi ai preferiti';set();b.onclick=e=>{e.preventDefault();e.stopPropagation();let f=favs().map(String);f=f.includes(String(s.id))?f.filter(x=>x!==String(s.id)):[...f,String(s.id)];save(f);set();renderFavs();};p.appendChild(b);});}
+async function init(){ensureUI();try{const r=await fetch(`data/stations.json?v=${V}`,{cache:'no-store'}),j=await r.json();stations=j.stations||[]}catch{}renderRank();renderFavs();new MutationObserver(enhancePopup).observe(document.body,{childList:true,subtree:true});enhancePopup();document.addEventListener('click',e=>{if(e.target.closest('.fuel-tab,#locateBtn'))setTimeout(renderRank,700)});$('#zoneSelect')?.addEventListener('change',()=>setTimeout(renderRank,100));setInterval(renderRank,30000);}
+document.addEventListener('DOMContentLoaded',init);
+})();
