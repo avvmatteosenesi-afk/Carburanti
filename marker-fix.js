@@ -6,10 +6,48 @@
   let lastMarkerTapId = null;
   let lastMarkerTapAt = 0;
 
+  function installPopupCloseButton(popup, root) {
+    if (!root || root.querySelector('.carburanti-popup-close')) return;
+
+    const leafletClose = root.querySelector('.leaflet-popup-close-button');
+    if (leafletClose) {
+      leafletClose.classList.add('carburanti-popup-close');
+      leafletClose.textContent = '×';
+      leafletClose.setAttribute('role', 'button');
+      leafletClose.setAttribute('aria-label', 'Chiudi popup');
+      leafletClose.setAttribute('title', 'Chiudi');
+      leafletClose.style.pointerEvents = 'auto';
+      leafletClose.style.touchAction = 'manipulation';
+      return;
+    }
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'carburanti-popup-close';
+    close.setAttribute('aria-label', 'Chiudi popup');
+    close.setAttribute('title', 'Chiudi');
+    close.textContent = '×';
+
+    ['pointerdown','pointerup','touchstart','touchend','mousedown','mouseup'].forEach(type => {
+      close.addEventListener(type, ev => ev.stopPropagation(), { passive: true });
+    });
+    close.addEventListener('click', ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation?.();
+      try { popup?._map?.closePopup(popup); } catch (_) {
+        try { window.CarburantiApp?.state?.map?.closePopup(); } catch (_) {}
+      }
+    });
+    root.appendChild(close);
+  }
+
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV28) return;
-    root.__carburantiProtectedV28 = true;
+    if (!root) return;
+    installPopupCloseButton(popup, root);
+    if (root.__carburantiProtectedV29) return;
+    root.__carburantiProtectedV29 = true;
     root.style.pointerEvents = 'auto';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
@@ -28,6 +66,7 @@
     popup.options.autoPan = false;
     popup.options.keepInView = false;
     popup.options.closeOnClick = false;
+    popup.options.closeButton = true;
     return popup;
   }
 
@@ -181,8 +220,8 @@
       userPane.style.zIndex = '800';
       userPane.style.pointerEvents = 'none';
     }
-    if (!map.__carburantiPopupV28) {
-      map.__carburantiPopupV28 = true;
+    if (!map.__carburantiPopupV29) {
+      map.__carburantiPopupV29 = true;
       map.on('popupopen', e => protectPopup(e.popup));
     }
     return true;
