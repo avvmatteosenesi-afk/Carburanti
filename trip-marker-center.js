@@ -3,13 +3,28 @@
 
   const MAP_ID = 'tripMap';
   let lastTouchAt = 0;
+  let tripMap = null;
+
+  // Registra in modo affidabile la mappa Viaggio quando Leaflet la crea.
+  // Il precedente tentativo di ricavarla scandendo le proprietà del DIV non è
+  // affidabile su Leaflet/iOS perché l'istanza Map non viene esposta lì.
+  try {
+    if (window.L?.Map?.addInitHook) {
+      L.Map.addInitHook(function () {
+        try {
+          if (this?._container?.id === MAP_ID) {
+            tripMap = this;
+            window.__carburantiTripMap = this;
+          }
+        } catch (_) {}
+      });
+    }
+  } catch (_) {}
 
   function findTripMap(container) {
     if (!container || !window.L) return null;
-    for (const key of Object.keys(container)) {
-      const value = container[key];
-      if (value && typeof value.getCenter === 'function' && typeof value.setView === 'function' && value._container === container) return value;
-    }
+    const known = tripMap || window.__carburantiTripMap;
+    if (known && known._container === container) return known;
     return null;
   }
 
@@ -59,23 +74,31 @@
     });
   }
 
+  function markerFromIcon(map, icon) {
+    if (!map || !icon) return null;
+    let marker = null;
+    try {
+      for (const layer of Object.values(map._layers || {})) {
+        if (marker || typeof layer?.getLatLng !== 'function') continue;
+        if ((layer.getElement?.() || layer._icon) === icon) marker = layer;
+      }
+    } catch (_) {}
+    return marker;
+  }
+
   function centerOnMarker(target) {
     const container = document.getElementById(MAP_ID);
     if (!container) return;
     const icon = target && target.closest ? target.closest('.leaflet-marker-icon') : null;
-    if (!icon || !container.contains(icon)) return;
+    if (!icon || !container.contains(icon) || !icon.querySelector?.('.price-marker')) return;
 
     const map = findTripMap(container);
     if (!map) return;
 
-    let marker = null;
-    map.eachLayer(layer => {
-      if (marker || typeof layer?.getLatLng !== 'function' || typeof layer?.getElement !== 'function') return;
-      if ((layer.getElement?.() || layer._icon) === icon) marker = layer;
-    });
+    const marker = markerFromIcon(map, icon);
     if (!marker) return;
 
-    const latlng = marker.getLatLng();
+    const latlng = marker.getLatLng?.();
     if (!latlng || !Number.isFinite(latlng.lat) || !Number.isFinite(latlng.lng)) return;
 
     const popup = marker.getPopup?.();
@@ -88,21 +111,34 @@
     map.options.closePopupOnClick = false;
 
     const zoom = Math.min(Math.max(map.getZoom(), 15), map.getMaxZoom());
-    try { map.stop(); } catch (_) {}
-    map.setView(latlng, zoom, { animate: true });
-
+    let opened = false;
     const open = () => {
+      if (opened) return;
+      opened = true;
       try { marker.openPopup(); } catch (_) {}
       requestAnimationFrame(() => protectPopup(map, marker.getPopup?.()));
     };
+
+    try { map.stop(); } catch (_) {}
     try { map.once('moveend', open); } catch (_) {}
-    setTimeout(open, 360);
+
+    try {
+      // Il distributore selezionato deve diventare il centro geometrico della
+      // mappa Viaggio. setView è più affidabile di panBy su Safari/iOS.
+      map.setView(latlng, zoom, { animate: true });
+    } catch (_) {
+      try { map.setView(latlng, zoom, { animate: false }); } catch (_) {}
+    }
+
+    // Fallback se moveend non viene emesso (es. punto già centrato).
+    setTimeout(open, 420);
   }
 
   function attachPopupProtection() {
     const container = document.getElementById(MAP_ID);
     const map = findTripMap(container);
-    if (!map || map.__tripPopupProtection) return false;
+    if (!map) return false;
+    if (map.__tripPopupProtection) return true;
     map.__tripPopupProtection = true;
     map.options.closePopupOnClick = false;
     const pane = map.getPane?.('popupPane');
@@ -116,16 +152,18 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     const timer = setInterval(() => {
-      if (attachPopupProtection()) clearInterval(timer);
-    }, 200);
-    setTimeout(() => clearInterval(timer), 30000);
+      attachPopupProtection();
+    }, 250);
+    window.addEventListener('beforeunload', () => clearInterval(timer), { once: true });
   });
 
   document.addEventListener('touchend', event => {
     const container = document.getElementById(MAP_ID);
     if (!container || !container.contains(event.target)) return;
     if (event.target.closest?.('.leaflet-popup')) return;
-    if (!event.target.closest?.('.price-marker-wrap, .price-marker')) return;
+    if (!event.target.closest?.('.price-marker-wrap, .price-marker, .leaflet-marker-icon')) return;
+    const markerIcon = event.target.closest?.('.leaflet-marker-icon');
+    if (!markerIcon?.querySelector?.('.price-marker')) return;
     lastTouchAt = Date.now();
     centerOnMarker(event.target);
   }, { passive: true, capture: true });
@@ -134,7 +172,9 @@
     const container = document.getElementById(MAP_ID);
     if (!container || !container.contains(event.target)) return;
     if (event.target.closest?.('.leaflet-popup')) return;
-    if (!event.target.closest?.('.price-marker-wrap, .price-marker')) return;
+    if (!event.target.closest?.('.price-marker-wrap, .price-marker, .leaflet-marker-icon')) return;
+    const markerIcon = event.target.closest?.('.leaflet-marker-icon');
+    if (!markerIcon?.querySelector?.('.price-marker')) return;
     if (Date.now() - lastTouchAt < 500) return;
     centerOnMarker(event.target);
   }, true);
