@@ -8,8 +8,8 @@
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV27) return;
-    root.__carburantiProtectedV27 = true;
+    if (!root || root.__carburantiProtectedV28) return;
+    root.__carburantiProtectedV28 = true;
     root.style.pointerEvents = 'auto';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
@@ -32,10 +32,10 @@
   }
 
   function markerForElement(target) {
-    const price = target?.closest?.('.price-marker');
-    if (!price) return null;
-    const wrap = price.closest('.leaflet-marker-icon');
-    if (!wrap) return null;
+    // Il nodo .price-marker ha pointer-events:none nei CSS: su iPhone il tap
+    // arriva quindi al wrapper Leaflet esterno. Accetta entrambi i casi.
+    const wrap = target?.closest?.('.price-marker-wrap, .leaflet-marker-icon');
+    if (!wrap || !wrap.querySelector?.('.price-marker')) return null;
     const registry = window.CarburantiApp?.state?.markerById;
     if (!registry?.values) return null;
     return Array.from(registry.values()).find(m => (m.getElement?.() || m._icon) === wrap) || null;
@@ -90,8 +90,6 @@
       finalized = true;
       try { map.stop(); } catch (_) {}
 
-      // Verifica sullo schermo, non solo sulle coordinate: il marker deve essere
-      // fisicamente al centro del riquadro mappa.
       if (!isCentered(map, latlng)) {
         try {
           if (typeof map._resetView === 'function') map._resetView(latlng, zoom, true);
@@ -114,8 +112,6 @@
       if (token !== centerToken) return;
       try { map.stop(); } catch (_) {}
 
-      // Evita che il moveend dell'app ricrei immediatamente i marker durante
-      // questo specifico ricentraggio da tap.
       if (state) {
         state.loaded = false;
         state.programmaticMove = true;
@@ -123,17 +119,21 @@
 
       try { map.once('moveend', finalize); } catch (_) {}
       try {
-        map.panTo(latlng, {
-          animate: true,
-          duration: 0.22,
-          easeLinearity: 0.25,
-          noMoveStart: true
-        });
+        // Sposta esattamente il punto del distributore al centro del riquadro.
+        const size = map.getSize();
+        const p = map.latLngToContainerPoint(latlng);
+        const dx = p.x - size.x / 2;
+        const dy = p.y - size.y / 2;
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+          map.panBy([dx, dy], { animate: true, duration: 0.22, easeLinearity: 0.25 });
+        } else {
+          finalize();
+          return;
+        }
       } catch (_) {
         try { map.setView(latlng, zoom, { animate: false }); } catch (_) {}
       }
 
-      // Fallback per iOS nel caso in cui Leaflet non emetta moveend.
       setTimeout(finalize, 360);
     }, 0);
   }
@@ -148,7 +148,6 @@
     ev?.stopPropagation?.();
     ev?.stopImmediatePropagation?.();
 
-    // Safari può generare pointerup + touchend per lo stesso tap: gestiscilo una volta sola.
     if (id && id === lastMarkerTapId && now - lastMarkerTapAt < 320) {
       suppressClickUntil = now + 1400;
       return true;
@@ -182,8 +181,8 @@
       userPane.style.zIndex = '800';
       userPane.style.pointerEvents = 'none';
     }
-    if (!map.__carburantiPopupV27) {
-      map.__carburantiPopupV27 = true;
+    if (!map.__carburantiPopupV28) {
+      map.__carburantiPopupV28 = true;
       map.on('popupopen', e => protectPopup(e.popup));
     }
     return true;
