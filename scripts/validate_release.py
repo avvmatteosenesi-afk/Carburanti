@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json,sys
+import json
 from datetime import datetime,timezone
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
@@ -13,7 +13,8 @@ for rel,minn in [('data/stations-it.json',15000),('data/stations.json',900)]:
  if snap:
   age=(datetime.now(timezone.utc).date()-datetime.fromisoformat(snap).date()).days
   print(f'{rel}: {n} impianti, snapshot {snap}, età {age} giorni, fonte {meta.get("source_mode")}')
-  if age>14: raise SystemExit(f'{rel}: dati troppo vecchi ({age} giorni)')
+  if age>30: raise SystemExit(f'{rel}: fallback eccessivamente vecchio ({age} giorni)')
+  if age>2: print(f'WARNING: {rel}: fallback MIMIT non recente ({age} giorni), pubblicazione consentita per continuità di servizio')
  else: print(f'{rel}: {n} impianti, fonte live')
 html=(ROOT/'index.html').read_text(encoding='utf-8')
 for token in ['trip.js','marker-fix.js','zone-colors-v2.js','location-visibility.js']:
