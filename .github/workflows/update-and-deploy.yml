@@ -35,7 +35,13 @@ jobs:
         run: python scripts/update_data.py
 
       - name: Refresh current prices from official Osservaprezzi API
-        run: python scripts/refresh_prices_secondary.py
+        shell: bash
+        run: |
+          if python scripts/refresh_prices_secondary.py; then
+            echo "Osservaprezzi live API aggiornata correttamente."
+          else
+            echo "::warning::API live MIMIT non disponibile o incompleta: mantengo il fallback ufficiale già generato da update_data.py."
+          fi
 
       - name: Validate data and release integrity
         run: python scripts/validate_release.py
@@ -64,3 +70,6 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Post-deploy live smoke test
+        run: python scripts/smoke_test_live.py
