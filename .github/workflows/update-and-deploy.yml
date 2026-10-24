@@ -31,10 +31,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Download MIMIT data
+      - name: Download MIMIT open-data base
         run: python scripts/update_data.py
 
-      - name: Refresh stale prices from secondary MIMIT mirror
+      - name: Refresh current prices from official Osservaprezzi API
         run: python scripts/refresh_prices_secondary.py
 
       - name: Validate data and release integrity
