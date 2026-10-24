@@ -37,19 +37,22 @@
     };
   }
 
-  navigator.geolocation.getCurrentPosition = (success, error, options) => {
+  navigator.geolocation.getCurrentPosition = (success, error, options = {}) => {
     const forceFresh = window.__carburantiForceFreshGeo === true;
     if (forceFresh) window.__carburantiForceFreshGeo = false;
 
-    // All'avvio riutilizza per pochi secondi l'ultima posizione già autorizzata:
-    // niente nuova richiesta/lampeggio. Un tap su "Mia posizione" forza invece il GPS.
-    if (!forceFresh && Date.now() < startupUntil) {
-      setTimeout(() => {
-        try { success?.(cachedPosition()); } catch (_) {}
-      }, 0);
-      return;
+    // maximumAge: 0 significa esplicitamente "posizione fresca". In questo caso
+    // non deve mai intervenire la cache d'avvio: il core usa già l'ultima
+    // posizione come anteprima e poi deve sostituirla con il GPS reale.
+    const explicitlyFresh = Number(options.maximumAge) === 0;
+    if (forceFresh || explicitlyFresh || Date.now() >= startupUntil) {
+      return realGetCurrentPosition(success, error, options);
     }
 
-    return realGetCurrentPosition(success, error, options);
+    // Solo chiamate che ammettono una posizione in cache possono ricevere per
+    // pochi secondi l'ultima posizione autorizzata, evitando lampeggi all'avvio.
+    setTimeout(() => {
+      try { success?.(cachedPosition()); } catch (_) {}
+    }, 0);
   };
 })();
