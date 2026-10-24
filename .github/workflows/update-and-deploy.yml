@@ -34,10 +34,22 @@ jobs:
       - name: Download MIMIT data
         run: python scripts/update_data.py
 
+      - name: Refresh stale prices from secondary MIMIT mirror
+        run: python scripts/refresh_prices_secondary.py
+
+      - name: Validate data and release integrity
+        run: python scripts/validate_release.py
+
       - name: Generate app icons
         run: |
           python -m pip install --quiet pillow
           python scripts/generate_icons.py
+
+      - name: Verify generated icons
+        run: |
+          test -s carburanti-green-180.png
+          test -s carburanti-green-192.png
+          test -s carburanti-green-512.png
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
