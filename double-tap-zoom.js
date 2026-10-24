@@ -64,12 +64,44 @@
     if (map && container) enableDoubleTapZoom(map, container);
   }
 
+  function attachTripMap() {
+    const container = document.getElementById('tripMap');
+    if (!container || container.dataset.doubleTapZoom === '1') return;
+    // trip.js creates the Leaflet map only when Viaggio is opened. Leaflet stores
+    // the map instance id on the container; find that live instance safely.
+    const mapId = container._leaflet_id;
+    if (!mapId) return;
+    let tripMap = null;
+    for (const key of Object.keys(window)) {
+      const candidate = window[key];
+      if (candidate && candidate instanceof L.Map && candidate.getContainer && candidate.getContainer() === container) {
+        tripMap = candidate;
+        break;
+      }
+    }
+    if (tripMap) enableDoubleTapZoom(tripMap, container);
+  }
+
+  // Capture Leaflet map construction so maps created later (notably Viaggio)
+  // receive the same touch gesture without changing trip.js behaviour.
+  const originalMapFactory = L.map;
+  L.map = function(...args) {
+    const map = originalMapFactory.apply(this, args);
+    const container = map.getContainer();
+    if (container && (container.id === 'map' || container.id === 'tripMap')) {
+      setTimeout(() => enableDoubleTapZoom(map, container), 0);
+    }
+    return map;
+  };
+  Object.assign(L.map, originalMapFactory);
+
   document.addEventListener('DOMContentLoaded', () => {
     let attempts = 0;
     const timer = setInterval(() => {
       attachMainMap();
+      attachTripMap();
       attempts += 1;
-      if ((window.CarburantiApp && window.CarburantiApp.state && window.CarburantiApp.state.map) || attempts >= 40) clearInterval(timer);
+      if (attempts >= 100) clearInterval(timer);
     }, 100);
   });
 })();
