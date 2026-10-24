@@ -3,11 +3,13 @@
 
   let suppressClickUntil = 0;
   let centerToken = 0;
+  let lastMarkerTapId = null;
+  let lastMarkerTapAt = 0;
 
   function protectPopup(popup) {
     const root = popup?.getElement?.();
-    if (!root || root.__carburantiProtectedV26) return;
-    root.__carburantiProtectedV26 = true;
+    if (!root || root.__carburantiProtectedV27) return;
+    root.__carburantiProtectedV27 = true;
     root.style.pointerEvents = 'auto';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
@@ -48,8 +50,11 @@
 
   function isCentered(map, latlng) {
     try {
-      const c = map.getCenter();
-      return Math.abs(c.lat - latlng.lat) < 1e-7 && Math.abs(c.lng - latlng.lng) < 1e-7;
+      const size = map.getSize();
+      const point = map.latLngToContainerPoint(latlng);
+      const cx = size.x / 2;
+      const cy = size.y / 2;
+      return Math.abs(point.x - cx) <= 1 && Math.abs(point.y - cy) <= 1;
     } catch (_) {
       return false;
     }
@@ -66,8 +71,7 @@
   }
 
   function centerThenOpen(marker) {
-    const app = window.CarburantiApp;
-    const state = app?.state;
+    const state = window.CarburantiApp?.state;
     const map = marker?._map || state?.map;
     const latlng = marker?.getLatLng?.();
     if (!map || !latlng) {
@@ -77,39 +81,81 @@
 
     const id = markerId(marker);
     const token = ++centerToken;
+    const wasLoaded = state?.loaded;
     const zoom = map.getZoom();
+    let finalized = false;
 
-    // Esegui il movimento dopo che Leaflet ha terminato pointerup/touchend.
+    const finalize = () => {
+      if (finalized || token !== centerToken) return;
+      finalized = true;
+      try { map.stop(); } catch (_) {}
+
+      // Verifica sullo schermo, non solo sulle coordinate: il marker deve essere
+      // fisicamente al centro del riquadro mappa.
+      if (!isCentered(map, latlng)) {
+        try {
+          if (typeof map._resetView === 'function') map._resetView(latlng, zoom, true);
+          else map.setView(latlng, zoom, { animate: false });
+        } catch (_) {}
+      }
+
+      if (state) {
+        state.loaded = wasLoaded;
+        state.programmaticMove = false;
+      }
+
+      requestAnimationFrame(() => {
+        if (token !== centerToken) return;
+        openMarkerById(id, marker);
+      });
+    };
+
     setTimeout(() => {
       if (token !== centerToken) return;
       try { map.stop(); } catch (_) {}
-      if (state) state.programmaticMove = true;
-      try { map.setView(latlng, zoom, { animate: false, reset: true }); } catch (_) {}
 
-      // Su iOS un gesto appena concluso può ancora applicare inerzia: verifica e
-      // ribadisci il centro una volta, poi apri il popup sul marker rigenerato.
-      setTimeout(() => {
-        if (token !== centerToken) return;
-        try { map.stop(); } catch (_) {}
-        if (!isCentered(map, latlng)) {
-          if (state) state.programmaticMove = true;
-          try { map.setView(latlng, zoom, { animate: false, reset: true }); } catch (_) {}
-        }
-        requestAnimationFrame(() => {
-          if (token !== centerToken) return;
-          openMarkerById(id, marker);
+      // Evita che il moveend dell'app ricrei immediatamente i marker durante
+      // questo specifico ricentraggio da tap.
+      if (state) {
+        state.loaded = false;
+        state.programmaticMove = true;
+      }
+
+      try { map.once('moveend', finalize); } catch (_) {}
+      try {
+        map.panTo(latlng, {
+          animate: true,
+          duration: 0.22,
+          easeLinearity: 0.25,
+          noMoveStart: true
         });
-      }, 70);
+      } catch (_) {
+        try { map.setView(latlng, zoom, { animate: false }); } catch (_) {}
+      }
+
+      // Fallback per iOS nel caso in cui Leaflet non emetta moveend.
+      setTimeout(finalize, 360);
     }, 0);
   }
 
   function openFromPriceElement(target, ev) {
     const marker = markerForElement(target);
     if (!marker) return false;
+    const id = markerId(marker);
+    const now = Date.now();
+
     if (ev?.cancelable) ev.preventDefault();
     ev?.stopPropagation?.();
     ev?.stopImmediatePropagation?.();
-    suppressClickUntil = Date.now() + 1400;
+
+    // Safari può generare pointerup + touchend per lo stesso tap: gestiscilo una volta sola.
+    if (id && id === lastMarkerTapId && now - lastMarkerTapAt < 320) {
+      suppressClickUntil = now + 1400;
+      return true;
+    }
+    lastMarkerTapId = id;
+    lastMarkerTapAt = now;
+    suppressClickUntil = now + 1400;
     centerThenOpen(marker);
     return true;
   }
@@ -136,8 +182,8 @@
       userPane.style.zIndex = '800';
       userPane.style.pointerEvents = 'none';
     }
-    if (!map.__carburantiPopupV26) {
-      map.__carburantiPopupV26 = true;
+    if (!map.__carburantiPopupV27) {
+      map.__carburantiPopupV27 = true;
       map.on('popupopen', e => protectPopup(e.popup));
     }
     return true;
