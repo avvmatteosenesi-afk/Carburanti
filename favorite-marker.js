@@ -12,33 +12,9 @@
     catch (_) { return new Set(); }
   }
 
-  function stationForMarker(marker) {
-    const ll = marker?.getLatLng?.();
-    if (!ll) return null;
-    return stations.find(s => Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon)) && Math.abs(Number(s.lat) - ll.lat) < 1e-5 && Math.abs(Number(s.lon) - ll.lng) < 1e-5) || null;
-  }
-
-  function mainMarkerIdForElement(el) {
-    const registry = window.CarburantiApp?.state?.markerById;
-    if (!registry?.entries) return null;
-    for (const [id, marker] of registry.entries()) {
-      if ((marker.getElement?.() || marker._icon) === el) return String(id);
-    }
-    return null;
-  }
-
   function markerFromElement(el) {
     const container = el?.closest?.('#map, #tripMap');
-    if (!container || !window.L) return null;
-
-    if (container.id === 'map') {
-      const registry = window.CarburantiApp?.state?.markerById;
-      if (registry?.values) {
-        const found = Array.from(registry.values()).find(m => (m.getElement?.() || m._icon) === el);
-        if (found) return found;
-      }
-    }
-
+    if (!container) return null;
     const map = container.id === 'tripMap' ? window.__carburantiTripMap : window.CarburantiApp?.state?.map;
     if (!map?.eachLayer) return null;
     let found = null;
@@ -52,15 +28,29 @@
     return found;
   }
 
+  function isFavoriteMarker(wrap, ids) {
+    const marker = markerFromElement(wrap);
+    const ll = marker?.getLatLng?.();
+    if (!ll) return false;
+
+    // Match by coordinates against both the Tuscany and national datasets,
+    // then test every matching station ID. This remains reliable even when
+    // the two datasets use different objects/IDs for the same installation.
+    return stations.some(s =>
+      ids.has(String(s.id)) &&
+      Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon)) &&
+      Math.abs(Number(s.lat) - ll.lat) < 1e-5 &&
+      Math.abs(Number(s.lon) - ll.lng) < 1e-5
+    );
+  }
+
   function setFavoriteStyle(price, isFavorite) {
     price.classList.toggle('favorite-station-price', isFavorite);
     if (isFavorite) {
-      price.style.setProperty('border-color', GOLD, 'important');
-      price.style.setProperty('border-width', '3px', 'important');
-      price.style.setProperty('box-shadow', '0 0 0 2px #fff, 0 0 0 5px #d4af37, 0 2px 7px rgba(0,0,0,.28)', 'important');
+      price.style.setProperty('border', `3px solid ${GOLD}`, 'important');
+      price.style.setProperty('box-shadow', `0 0 0 3px ${GOLD}, 0 2px 8px rgba(0,0,0,.35)`, 'important');
     } else {
-      price.style.removeProperty('border-color');
-      price.style.removeProperty('border-width');
+      price.style.removeProperty('border');
       price.style.removeProperty('box-shadow');
     }
   }
@@ -73,17 +63,7 @@
       if (!container) continue;
       container.querySelectorAll('.price-marker-wrap').forEach(wrap => {
         const price = wrap.querySelector('.price-marker');
-        if (!price) return;
-
-        // Main map: use the exact markerById registry. This avoids relying on
-        // coordinates and on the independently refreshed national dataset.
-        let stationId = mapId === 'map' ? mainMarkerIdForElement(wrap) : null;
-        if (!stationId) {
-          const marker = markerFromElement(wrap);
-          const station = stationForMarker(marker);
-          stationId = station ? String(station.id) : null;
-        }
-        setFavoriteStyle(price, Boolean(stationId && ids.has(stationId)));
+        if (price) setFavoriteStyle(price, isFavoriteMarker(wrap, ids));
       });
     }
   }
@@ -95,13 +75,17 @@
   }
 
   async function loadStations() {
-    try {
-      const r = await fetch('data/stations-it.json?v=20261025-fav2', { cache: 'no-store' });
-      if (r.ok) {
+    const urls = ['data/stations.json?v=20261025-fav3', 'data/stations-it.json?v=20261025-fav3'];
+    const all = [];
+    await Promise.all(urls.map(async url => {
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (!r.ok) return;
         const j = await r.json();
-        stations = Array.isArray(j.stations) ? j.stations : [];
-      }
-    } catch (_) {}
+        if (Array.isArray(j.stations)) all.push(...j.stations);
+      } catch (_) {}
+    }));
+    stations = all;
     queueApply();
   }
 
@@ -115,13 +99,13 @@
 
     document.addEventListener('click', e => {
       if (e.target?.closest?.('.fav-btn')) {
-        setTimeout(queueApply, 0);
-        setTimeout(queueApply, 80);
-        setTimeout(queueApply, 250);
+        setTimeout(queueApply, 20);
+        setTimeout(queueApply, 120);
+        setTimeout(queueApply, 350);
       }
     }, true);
     window.addEventListener('storage', e => { if (e.key === FKEY) queueApply(); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) queueApply(); });
-    setInterval(queueApply, 1500);
+    setInterval(queueApply, 1200);
   });
 })();
