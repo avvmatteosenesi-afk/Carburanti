@@ -18,11 +18,19 @@
     return stations.find(s => Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon)) && Math.abs(Number(s.lat) - ll.lat) < 1e-5 && Math.abs(Number(s.lon) - ll.lng) < 1e-5) || null;
   }
 
+  function mainMarkerIdForElement(el) {
+    const registry = window.CarburantiApp?.state?.markerById;
+    if (!registry?.entries) return null;
+    for (const [id, marker] of registry.entries()) {
+      if ((marker.getElement?.() || marker._icon) === el) return String(id);
+    }
+    return null;
+  }
+
   function markerFromElement(el) {
     const container = el?.closest?.('#map, #tripMap');
     if (!container || !window.L) return null;
 
-    // Main map has a stable registry: prefer it when available.
     if (container.id === 'map') {
       const registry = window.CarburantiApp?.state?.markerById;
       if (registry?.values) {
@@ -31,14 +39,8 @@
       }
     }
 
-    // Viaggio markers are not exposed publicly. Leaflet stores the marker's
-    // DOM element as _icon, so inspect the map's layers and match the icon.
-    let map = null;
-    for (const key of Object.keys(container)) {
-      const value = container[key];
-      if (value && value._container === container && typeof value.eachLayer === 'function') { map = value; break; }
-    }
-    if (!map) return null;
+    const map = container.id === 'tripMap' ? window.__carburantiTripMap : window.CarburantiApp?.state?.map;
+    if (!map?.eachLayer) return null;
     let found = null;
     map.eachLayer(layer => {
       if (found) return;
@@ -50,6 +52,19 @@
     return found;
   }
 
+  function setFavoriteStyle(price, isFavorite) {
+    price.classList.toggle('favorite-station-price', isFavorite);
+    if (isFavorite) {
+      price.style.setProperty('border-color', GOLD, 'important');
+      price.style.setProperty('border-width', '3px', 'important');
+      price.style.setProperty('box-shadow', '0 0 0 2px #fff, 0 0 0 5px #d4af37, 0 2px 7px rgba(0,0,0,.28)', 'important');
+    } else {
+      price.style.removeProperty('border-color');
+      price.style.removeProperty('border-width');
+      price.style.removeProperty('box-shadow');
+    }
+  }
+
   function apply() {
     refreshQueued = false;
     const ids = favoriteIds();
@@ -59,19 +74,16 @@
       container.querySelectorAll('.price-marker-wrap').forEach(wrap => {
         const price = wrap.querySelector('.price-marker');
         if (!price) return;
-        const marker = markerFromElement(wrap);
-        const station = stationForMarker(marker);
-        const isFavorite = Boolean(station && ids.has(String(station.id)));
-        price.classList.toggle('favorite-station-price', isFavorite);
-        if (isFavorite) {
-          price.style.setProperty('border-color', GOLD, 'important');
-          price.style.setProperty('border-width', '3px', 'important');
-          price.style.setProperty('box-shadow', '0 0 0 1px rgba(255,255,255,.85), 0 2px 7px rgba(0,0,0,.24)', 'important');
-        } else if (price.classList.contains('favorite-station-price') === false) {
-          price.style.removeProperty('border-color');
-          price.style.removeProperty('border-width');
-          price.style.removeProperty('box-shadow');
+
+        // Main map: use the exact markerById registry. This avoids relying on
+        // coordinates and on the independently refreshed national dataset.
+        let stationId = mapId === 'map' ? mainMarkerIdForElement(wrap) : null;
+        if (!stationId) {
+          const marker = markerFromElement(wrap);
+          const station = stationForMarker(marker);
+          stationId = station ? String(station.id) : null;
         }
+        setFavoriteStyle(price, Boolean(stationId && ids.has(stationId)));
       });
     }
   }
@@ -84,7 +96,7 @@
 
   async function loadStations() {
     try {
-      const r = await fetch('data/stations-it.json?v=20261025-fav1', { cache: 'no-store' });
+      const r = await fetch('data/stations-it.json?v=20261025-fav2', { cache: 'no-store' });
       if (r.ok) {
         const j = await r.json();
         stations = Array.isArray(j.stations) ? j.stations : [];
@@ -101,10 +113,12 @@
       if (el) observer.observe(el, { childList: true, subtree: true });
     });
 
-    // The favorite button writes localStorage in its click handler. Refresh on
-    // the next task so the new favorite state is already persisted.
     document.addEventListener('click', e => {
-      if (e.target?.closest?.('.fav-btn')) setTimeout(queueApply, 0);
+      if (e.target?.closest?.('.fav-btn')) {
+        setTimeout(queueApply, 0);
+        setTimeout(queueApply, 80);
+        setTimeout(queueApply, 250);
+      }
     }, true);
     window.addEventListener('storage', e => { if (e.key === FKEY) queueApply(); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) queueApply(); });
