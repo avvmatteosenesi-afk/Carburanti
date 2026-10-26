@@ -92,7 +92,28 @@ def fuel_name(p):
  fid=str(p.get('fuelId') or p.get('idCarb') or p.get('idFuel') or '').strip()
  return {'1':'benzina','2':'gasolio','3':'metano','4':'gpl'}.get(fid)
 
+def validate_standard_fuel_classifier():
+ tests={
+  'Benzina':'benzina', 'Benzina Self':'benzina', 'Gasolio':'gasolio', 'Gasolio Self':'gasolio',
+  'Diesel':'gasolio', 'Diesel Self':'gasolio', 'GPL':'gpl', 'Metano':'metano', 'CNG':'metano',
+  'Blue Diesel':None, 'Diesel+':None, 'Gasolio Premium':None, 'HVOlution':None,
+  'Benzina 100 Ottani':None, 'Benzina Premium':None,
+ }
+ for name,expected in tests.items():
+  got=fuel_name({'name':name})
+  if got!=expected:raise RuntimeError(f'Classificatore carburanti: {name!r} -> {got!r}, atteso {expected!r}')
+
+
 def main():
+ validate_standard_fuel_classifier()
+ # Probe rapido: se l'endpoint Osservaprezzi è irraggiungibile, non attendiamo
+ # timeout ripetuti per tutte le province. Il workflow userà il fallback ufficiale.
+ try:
+  probe=unwrap_rows(request_json('search/area',{'region':12,'province':'PO','town':None,'priceOrder':'asc'},timeout=12,attempts=1))
+  if not probe:raise RuntimeError('risposta vuota')
+ except Exception as exc:
+  raise RuntimeError(f'API Osservaprezzi non raggiungibile (probe PO): {exc}')
+
  national_path=DATA/'stations-it.json'; tuscany_path=DATA/'stations.json'
  national=json.loads(national_path.read_text(encoding='utf-8')); by_id={str(s['id']):s for s in national['stations']}
  province_codes=sorted({str(s.get('province','')).upper() for s in by_id.values() if s.get('province')})
