@@ -3,7 +3,6 @@
 
   const RETRY_DELAYS = [350, 900, 1800];
   const DATA_URL = 'data/stations.json';
-  const RAW_URL = 'https://raw.githubusercontent.com/avvmatteosenesi-afk/Carburanti/main/data/stations.json';
   let recovered = false;
 
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -14,9 +13,13 @@
 
   function statusText(payload) {
     const meta = payload.metadata || {};
-    const stamp = meta.generated_at ? new Date(meta.generated_at) : null;
+    const snapshot = meta.source_snapshot_date || meta.generated_at || null;
+    const stamp = snapshot ? new Date(snapshot) : null;
+    const hasTime = typeof snapshot === 'string' && snapshot.includes('T');
     const dateText = stamp && !Number.isNaN(stamp.getTime())
-      ? stamp.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+      ? stamp.toLocaleString('it-IT', hasTime
+          ? { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }
+          : { day: '2-digit', month: '2-digit', year: 'numeric' })
       : 'dato disponibile';
     return `${payload.stations.length.toLocaleString('it-IT')} impianti · agg. ${dateText}`;
   }
@@ -64,10 +67,6 @@
         if (applyPayload(payload)) return;
       } catch (_) {}
     }
-    try {
-      const payload = await fetchPayload(RAW_URL);
-      if (applyPayload(payload)) return;
-    } catch (_) {}
     const status = document.getElementById('dataStatus');
     if (status) status.textContent = 'Dati non disponibili';
     const notice = document.getElementById('mapNotice');
