@@ -73,11 +73,22 @@ def coords(item):
  lon=parse_float(item.get('lon') if item.get('lon') is not None else (loc.get('lng') if loc.get('lng') is not None else loc.get('lon')))
  return lat,lon
 def fuel_name(p):
- name=str(p.get('name') or p.get('carb') or p.get('fuel') or '').lower().strip()
- if 'benzina' in name or name in ('super','be'):return 'benzina'
- if 'gasolio' in name or 'diesel' in name or name in ('g','ga'):return 'gasolio'
- if 'gpl' in name:return 'gpl'
- if 'metano' in name or 'cng' in name:return 'metano'
+ # L'API restituisce anche carburanti premium (es. Blue Diesel, Diesel+, HVO).
+ # Non devono mai sovrascrivere il prezzo del gasolio/benzina standard mostrato dall'app.
+ raw=str(p.get('name') or p.get('carb') or p.get('fuel') or '').strip()
+ name=' '.join(raw.lower().replace('_',' ').split())
+ if name:
+  if name=='benzina' or name.startswith('benzina self') or name in ('super','be'):
+   return 'benzina'
+  if name=='gasolio' or name.startswith('gasolio self') or name in ('diesel','diesel self','g','ga'):
+   return 'gasolio'
+  if name=='gpl' or name.startswith('gpl self'):
+   return 'gpl'
+  if name=='metano' or name.startswith('metano self') or name in ('cng','cng self'):
+   return 'metano'
+  # Se il nome è presente ma non è una delle tipologie standard, è intenzionale:
+  # niente fallback sull'ID, perché gli ID dei carburanti premium possono essere ambigui.
+  return None
  fid=str(p.get('fuelId') or p.get('idCarb') or p.get('idFuel') or '').strip()
  return {'1':'benzina','2':'gasolio','3':'metano','4':'gpl'}.get(fid)
 
