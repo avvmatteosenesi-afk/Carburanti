@@ -2,6 +2,21 @@
   'use strict';
   const KEY = 'carburanti:last-manual-refresh';
 
+  async function purgeDataCaches() {
+    if (!('caches' in window)) return;
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter(k => k.startsWith('carburanti-data-')).map(k => caches.delete(k)));
+    } catch (_) {}
+  }
+
+  async function reloadFresh(param) {
+    await purgeDataCaches();
+    const url = new URL(location.href);
+    url.searchParams.set(param, Date.now());
+    location.replace(url.toString());
+  }
+
   function addRefreshButton() {
     if (document.getElementById('refreshPricesBtn')) return;
     const status = document.getElementById('dataStatus');
@@ -22,13 +37,11 @@
     btn.style.cssText = 'border:1px solid #d9e0e6;background:#fff;border-radius:9px;min-width:30px;height:30px;padding:0 7px;font-size:19px;line-height:1;cursor:pointer;color:#17212b';
     row.appendChild(btn);
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       btn.disabled = true;
       btn.textContent = '…';
       try { sessionStorage.setItem(KEY, String(Date.now())); } catch (_) {}
-      const url = new URL(location.href);
-      url.searchParams.set('refresh', Date.now());
-      location.replace(url.toString());
+      await reloadFresh('refresh');
     });
 
     let lastAutoReload = Date.now();
@@ -38,9 +51,7 @@
       if (document.hidden) return;
       if (Date.now() - lastAutoReload < 60 * 60 * 1000) return;
       lastAutoReload = Date.now();
-      const url = new URL(location.href);
-      url.searchParams.set('autoRefresh', Date.now());
-      location.replace(url.toString());
+      reloadFresh('autoRefresh');
     }, 60 * 1000);
   }
 
