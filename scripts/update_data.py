@@ -81,9 +81,9 @@ def fetch_mimit_pair():
     """Preferisce MIMIT live; se non risponde usa l'ultimo snapshot MIMIT archiviato."""
     try:
         print("Download anagrafica MIMIT live…", flush=True)
-        stations_text = fetch_text(STATIONS_URL)
+        stations_text = fetch_text(STATIONS_URL, timeout=15, attempts=1)
         print("Download prezzi MIMIT live…", flush=True)
-        prices_text = fetch_text(PRICES_URL)
+        prices_text = fetch_text(PRICES_URL, timeout=15, attempts=1)
         return stations_text, prices_text, {
             "mode": "mimit-live",
             "stations_url": STATIONS_URL,
