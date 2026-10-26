@@ -180,16 +180,33 @@ def iso_date(value: str) -> str | None:
 
 def fuel_key(desc: str):
     t = norm_text(desc)
-    # Manteniamo solo le quattro tipologie previste dall'app, senza elettrico.
-    if t == "benzina" or t.startswith("benzina self"):
+    # Solo carburanti BASE: nessun match per prefisso, così le varianti premium
+    # (Blue Diesel, HVO, 100 ottani, additivate, ecc.) restano escluse.
+    if t in {"benzina", "benzina self"}:
         return "benzina"
-    if t == "gasolio" or t.startswith("gasolio self"):
+    if t in {"gasolio", "gasolio self", "diesel", "diesel self"}:
         return "gasolio"
-    if t == "gpl":
+    if t in {"gpl", "gpl self"}:
         return "gpl"
-    if t == "metano":
+    if t in {"metano", "metano self", "cng", "cng self"}:
         return "metano"
     return None
+
+
+def validate_fuel_classifier():
+    tests = {
+        "Benzina": "benzina", "Benzina Self": "benzina",
+        "Gasolio": "gasolio", "Gasolio Self": "gasolio", "Diesel": "gasolio",
+        "GPL": "gpl", "Metano": "metano",
+        "Blue Diesel": None, "Diesel+": None, "Gasolio Premium": None,
+        "Gasolio Self Premium": None, "HVOlution": None,
+        "Benzina 100 Ottani": None, "Benzina Self 100 Ottani": None,
+        "Benzina Premium": None,
+    }
+    for name, expected in tests.items():
+        got = fuel_key(name)
+        if got != expected:
+            raise RuntimeError(f"Classificatore carburanti: {name!r} -> {got!r}, atteso {expected!r}")
 
 
 def valid_italy(lat, lon):
@@ -231,6 +248,7 @@ def choose_price(existing, candidate):
 
 
 def main():
+    validate_fuel_classifier()
     stations_text, prices_text, source_info = fetch_mimit_pair()
 
     stations = {}
