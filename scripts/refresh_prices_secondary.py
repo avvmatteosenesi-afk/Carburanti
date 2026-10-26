@@ -78,13 +78,13 @@ def fuel_name(p):
  raw=str(p.get('name') or p.get('carb') or p.get('fuel') or '').strip()
  name=' '.join(raw.lower().replace('_',' ').split())
  if name:
-  if name=='benzina' or name.startswith('benzina self') or name in ('super','be'):
+  if name in ('benzina','benzina self','super','be'):
    return 'benzina'
-  if name=='gasolio' or name.startswith('gasolio self') or name in ('diesel','diesel self','g','ga'):
+  if name in ('gasolio','gasolio self','diesel','diesel self','g','ga'):
    return 'gasolio'
-  if name=='gpl' or name.startswith('gpl self'):
+  if name in ('gpl','gpl self'):
    return 'gpl'
-  if name=='metano' or name.startswith('metano self') or name in ('cng','cng self'):
+  if name in ('metano','metano self','cng','cng self'):
    return 'metano'
   # Se il nome è presente ma non è una delle tipologie standard, è intenzionale:
   # niente fallback sull'ID, perché gli ID dei carburanti premium possono essere ambigui.
@@ -96,8 +96,8 @@ def validate_standard_fuel_classifier():
  tests={
   'Benzina':'benzina', 'Benzina Self':'benzina', 'Gasolio':'gasolio', 'Gasolio Self':'gasolio',
   'Diesel':'gasolio', 'Diesel Self':'gasolio', 'GPL':'gpl', 'Metano':'metano', 'CNG':'metano',
-  'Blue Diesel':None, 'Diesel+':None, 'Gasolio Premium':None, 'HVOlution':None,
-  'Benzina 100 Ottani':None, 'Benzina Premium':None,
+  'Blue Diesel':None, 'Diesel+':None, 'Gasolio Premium':None, 'Gasolio Self Premium':None, 'HVOlution':None,
+  'Benzina 100 Ottani':None, 'Benzina Self 100 Ottani':None, 'Benzina Premium':None,
  }
  for name,expected in tests.items():
   got=fuel_name({'name':name})
