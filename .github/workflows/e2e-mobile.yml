@@ -1,0 +1,58 @@
+name: Mobile E2E regression tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '*.js'
+      - '*.html'
+      - '*.css'
+      - 'tests/e2e/**'
+      - 'playwright.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/e2e-mobile.yml'
+  schedule:
+    - cron: '41 5 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-e2e
+  cancel-in-progress: true
+
+jobs:
+  mobile-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install test dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install WebKit browser
+        run: npx playwright install --with-deps webkit
+
+      - name: Run mobile regression tests against published app
+        env:
+          PLAYWRIGHT_TEST_BASE_URL: https://avvmatteosenesi-afk.github.io/Carburanti/
+        run: npx playwright test --project=mobile-webkit
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-mobile-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
