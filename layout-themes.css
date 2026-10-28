@@ -1,21 +1,25 @@
-/* Illustrated selectable layouts. Compact artwork above a larger map. */
+/* Illustrated selectable layouts. IMPORTANT: these rules only apply when a themed data-layout is present. Classico removes data-layout and therefore stays identical to the base app. */
 :root{--theme-bg:#eef2f5;--theme-top-a:#20c6ff;--theme-top-b:#ffe36b;--theme-ink:#17212b;--theme-accent:#0d6efd;--theme-soft:#fff7d2;--theme-edge:#17212b;--theme-art:none;--theme-pos:center top;--theme-glow:none}
-body{background:var(--theme-bg);color:var(--theme-ink)}
-.controls-card>.legend{display:none!important}.controls-card{padding-bottom:4px!important;margin-bottom:1px!important}.map-card{margin-top:1px!important}
-.app-shell{position:relative;isolation:isolate}
+/* Theme-only visual changes: never alter the base/classic layout. */
+body[data-layout]{background:var(--theme-bg);color:var(--theme-ink)}
+body[data-layout] .controls-card>.legend{display:none!important}
+body[data-layout] .controls-card{padding-bottom:4px!important;margin-bottom:1px!important}
+body[data-layout] .map-card{margin-top:1px!important}
+body[data-layout] .app-shell{position:relative;isolation:isolate}
 body[data-layout] .app-shell:before{content:"";position:absolute;z-index:-2;left:0;right:0;top:0;height:330px;border-radius:22px;background-image:linear-gradient(180deg,rgba(0,0,0,.04),rgba(255,255,255,.08)),var(--theme-art),linear-gradient(115deg,var(--theme-top-a),var(--theme-top-b));background-size:cover;background-position:var(--theme-pos);background-repeat:no-repeat;box-shadow:var(--theme-glow)}
 body[data-layout] .app-shell:after{content:"";position:absolute;z-index:-1;left:0;right:0;top:0;height:330px;border-radius:22px;background:linear-gradient(180deg,transparent 0 24%,rgba(255,255,255,.08) 42%,rgba(255,255,255,.22) 100%);pointer-events:none}
-.topbar{position:relative;overflow:hidden;min-height:102px;background:linear-gradient(115deg,var(--theme-top-a),var(--theme-top-b));border:2px solid var(--theme-edge);box-shadow:var(--theme-glow);padding-top:5px!important;padding-bottom:5px!important}
-body[data-layout] .topbar{background:transparent;box-shadow:none}
-.topbar:before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(90deg,rgba(0,0,0,.12),rgba(0,0,0,.02)),var(--theme-art);background-size:cover;background-position:var(--theme-pos);background-repeat:no-repeat;opacity:.96}
-body[data-layout] .topbar:before{background-image:linear-gradient(90deg,rgba(0,0,0,.14),rgba(0,0,0,.02));opacity:1}
-.topbar:after{content:"";position:absolute;left:0;right:0;bottom:0;height:48px;pointer-events:none;background:linear-gradient(0deg,rgba(0,0,0,.38),transparent)}
-.topbar>*{position:relative;z-index:2}.brand-wrap,.top-actions{align-self:flex-end;margin-bottom:1px}.brand-wrap h1,.brand-wrap .subtle{color:#fff!important;text-shadow:0 2px 3px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.55)}.brand-icon{filter:drop-shadow(0 2px 2px rgba(0,0,0,.7))}
-.controls-card{background:linear-gradient(180deg,#fff,var(--theme-soft));border-color:var(--theme-edge)}
+body[data-layout] .topbar{position:relative;overflow:hidden;min-height:102px;background:transparent;border:2px solid var(--theme-edge);box-shadow:none;padding-top:5px!important;padding-bottom:5px!important}
+body[data-layout] .topbar:before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(90deg,rgba(0,0,0,.14),rgba(0,0,0,.02));background-size:cover;background-position:var(--theme-pos);background-repeat:no-repeat;opacity:1}
+body[data-layout] .topbar:after{content:"";position:absolute;left:0;right:0;bottom:0;height:48px;pointer-events:none;background:linear-gradient(0deg,rgba(0,0,0,.38),transparent)}
+body[data-layout] .topbar>*{position:relative;z-index:2}
+body[data-layout] .brand-wrap,body[data-layout] .top-actions{align-self:flex-end;margin-bottom:1px}
+body[data-layout] .brand-wrap h1,body[data-layout] .brand-wrap .subtle{color:#fff!important;text-shadow:0 2px 3px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.55)}
+body[data-layout] .brand-icon{filter:drop-shadow(0 2px 2px rgba(0,0,0,.7))}
 body[data-layout] .controls-card{background:rgba(255,255,255,.64)!important;backdrop-filter:blur(2.5px);-webkit-backdrop-filter:blur(2.5px);border-color:var(--theme-edge);box-shadow:0 2px 8px rgba(0,0,0,.10)}
 body[data-layout] .fuel-tab,body[data-layout] #zoneSelect,body[data-layout] .small-btn{background-color:rgba(255,255,255,.82);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
 body[data-layout] .fuel-tab.active{background:color-mix(in srgb,var(--theme-accent) 88%,white);color:#fff}
-.fuel-tab.active,.wide-btn{background:var(--theme-accent)}.small-btn{background:#ffe23c}.map-card{border-color:var(--theme-edge);box-shadow:0 3px 0 color-mix(in srgb,var(--theme-edge) 25%,transparent)}
+body[data-layout] .wide-btn{background:var(--theme-accent)}
+body[data-layout] .map-card{border-color:var(--theme-edge);box-shadow:0 3px 0 color-mix(in srgb,var(--theme-edge) 25%,transparent)}
 body[data-layout] .quick-strip,body[data-layout] .quick-choices,body[data-layout] .home-quick,body[data-layout] [class*="quick"]{backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
 body[data-layout] .quick-strip,body[data-layout] .quick-choices,body[data-layout] .home-quick{background:rgba(255,255,255,.62)!important;border-color:var(--theme-edge)!important}
 body[data-layout="dragon"]{--theme-bg:#e7f5ff;--theme-top-a:#0a47aa;--theme-top-b:#a33dff;--theme-accent:#147cff;--theme-soft:#eef7ff;--theme-edge:#18234d;--theme-glow:0 0 18px rgba(80,190,255,.45);--theme-art:url("https://es.kotaku.com/app/uploads/2026/09/KOTAKU-18-960x640.jpg");--theme-pos:left 30%}
@@ -28,5 +32,5 @@ body[data-layout="mazinga"]{--theme-bg:#e8eef3;--theme-top-a:#172331;--theme-top
 body[data-layout="goldrake"]{--theme-bg:#e6efff;--theme-top-a:#06194b;--theme-top-b:#167bd1;--theme-accent:#185bc7;--theme-soft:#eef5ff;--theme-edge:#092c73;--theme-glow:0 0 18px rgba(22,123,209,.35);--theme-art:url("https://storage.ecodibergamo.it/media/photologue/2015/10/5/photos/goldrake-e-jeeg-robot-dacciaiogli-eroi-della-tv-compiono-40-anni-video_6fc0847a-6b6a-11e5-b026-a0f9a076689f_900_566.jpg");--theme-pos:left 27%}
 body[data-layout="lamu"]{--theme-bg:#fff0fa;--theme-top-a:#ff72c7;--theme-top-b:#ffe23c;--theme-accent:#ff3f9a;--theme-soft:#fff1fb;--theme-edge:#77326a;--theme-glow:0 0 18px rgba(255,226,60,.45);--theme-art:url("https://i0.wp.com/operationrainfall.com/wp-content/uploads/2019/01/vlcsnap-2019-01-22-22h40m43s41.png?ssl=1");--theme-pos:left 34%}
 .layout-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.layout-choice{border:2px solid #d8dee5;border-radius:13px;background:#fff;padding:8px;text-align:left;font-weight:800;min-height:54px;color:#17212b}.layout-choice small{display:block;margin-top:2px;color:#6b7683;font-size:.66rem;font-weight:600}.layout-choice.is-selected{border-color:#0d6efd;box-shadow:0 0 0 2px rgba(13,110,253,.12)}.layout-swatch{display:inline-block;width:22px;height:10px;border-radius:999px;margin-right:6px;vertical-align:1px;background:linear-gradient(90deg,var(--a),var(--b))}
-@media(max-width:700px){body[data-layout] .app-shell:before,body[data-layout] .app-shell:after{height:300px}.topbar{min-height:88px}.controls-card{padding-top:5px!important;padding-bottom:4px!important;gap:4px!important}.fuel-tab{min-height:31px!important}.zone-row select{min-height:38px!important}.smart-fuel-card{min-height:31px!important;margin-bottom:1px!important;padding-top:2px!important;padding-bottom:2px!important}#map{height:calc(100svh - 112px)!important;min-height:680px!important;max-height:900px!important}}
-@media(max-width:420px){body[data-layout] .app-shell:before,body[data-layout] .app-shell:after{height:290px}.topbar{min-height:84px}.layout-picker{grid-template-columns:1fr 1fr}.layout-choice{font-size:.78rem;padding:7px;min-height:50px}}
+@media(max-width:700px){body[data-layout] .app-shell:before,body[data-layout] .app-shell:after{height:300px}body[data-layout] .topbar{min-height:88px}body[data-layout] .controls-card{padding-top:5px!important;padding-bottom:4px!important;gap:4px!important}body[data-layout] .fuel-tab{min-height:31px!important}body[data-layout] .zone-row select{min-height:38px!important}body[data-layout] .smart-fuel-card{min-height:31px!important;margin-bottom:1px!important;padding-top:2px!important;padding-bottom:2px!important}body[data-layout] #map{height:calc(100svh - 112px)!important;min-height:680px!important;max-height:900px!important}}
+@media(max-width:420px){body[data-layout] .app-shell:before,body[data-layout] .app-shell:after{height:290px}body[data-layout] .topbar{min-height:84px}.layout-picker{grid-template-columns:1fr 1fr}.layout-choice{font-size:.78rem;padding:7px;min-height:50px}}
