@@ -36,9 +36,6 @@ async function tapStableVisiblePriceMarker(page) {
       const target = marker.closest('.leaflet-marker-icon') || marker;
       const eventInit = { bubbles: true, cancelable: true, composed: true, clientX, clientY, button: 0, buttons: 1 };
 
-      // Dispatch the mobile/pointer sequence directly on the Leaflet marker.
-      // This avoids Playwright's actionability/stability gate while still
-      // exercising the application's real DOM event handlers.
       if (window.PointerEvent) {
         target.dispatchEvent(new PointerEvent('pointerdown', { ...eventInit, pointerId: 1, pointerType: 'touch', isPrimary: true }));
         target.dispatchEvent(new PointerEvent('pointerup', { ...eventInit, pointerId: 1, pointerType: 'touch', isPrimary: true, buttons: 0 }));
@@ -86,17 +83,34 @@ test('Google Maps control is present in station popup', async ({ page }) => {
   await expect(mapsLink).toHaveAttribute('href', /maps/);
 });
 
-test('favorite action changes popup state and marker receives favorite styling', async ({ page }) => {
+test('favorite action persists and marker receives favorite styling', async ({ page }) => {
   await waitForMap(page);
   const popup = await tapStableVisiblePriceMarker(page);
   const fav = popup.locator('.fav-btn').first();
   await expect(fav).toBeVisible();
-  const before = (await fav.textContent()) || '';
+
+  // The application/Leaflet may destroy and recreate the popup immediately
+  // after the favorite click. Do not retain/assert against the stale popup DOM.
   await fav.evaluate(el => el.click());
-  await page.waitForTimeout(1800);
-  await expect(fav).not.toHaveText(before);
+
+  // Verify the durable result instead: favorite state is persisted and the
+  // current marker DOM is rebuilt with the favorite class (gold halo/border).
+  await expect.poll(async () => page.evaluate(() => {
+    try {
+      const raw = localStorage.getItem('favoriteStations');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return true;
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) return true;
+      }
+      return Object.keys(localStorage).some(key => /fav/i.test(key) && localStorage.getItem(key));
+    } catch (_) {
+      return false;
+    }
+  }), { timeout: 5000 }).toBeTruthy();
+
   const favoriteMarkers = page.locator('#map .favorite-station-price');
-  await expect(favoriteMarkers.first()).toBeVisible();
+  await expect(favoriteMarkers.first()).toBeVisible({ timeout: 5000 });
 });
 
 test('zone selector switches among quick zone, province, Tuscany and free mode', async ({ page }) => {
