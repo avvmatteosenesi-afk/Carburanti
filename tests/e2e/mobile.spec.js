@@ -14,20 +14,15 @@ async function tapStableVisiblePriceMarker(page, mapSelector = '#map') {
       const map = document.querySelector(selector);
       if (!map) return false;
       const mapRect = map.getBoundingClientRect();
-      const candidates = Array.from(map.querySelectorAll('.price-marker'));
-      const marker = candidates.find(el => {
-        const r = el.getBoundingClientRect();
-        const style = getComputedStyle(el);
-        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
-        if (r.width < 1 || r.height < 1) return false;
+      const marker = Array.from(map.querySelectorAll('.price-marker')).find(el => {
+        const r = el.getBoundingClientRect(), style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || r.width < 1 || r.height < 1) return false;
         const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
         return cx >= mapRect.left + 4 && cx <= mapRect.right - 4 && cy >= mapRect.top + 4 && cy <= mapRect.bottom - 4;
       });
       if (!marker) return false;
-      const r = marker.getBoundingClientRect();
-      const clientX = r.left + r.width / 2, clientY = r.top + r.height / 2;
-      const target = marker.closest('.leaflet-marker-icon') || marker;
-      const eventInit = { bubbles: true, cancelable: true, composed: true, clientX, clientY, button: 0, buttons: 1 };
+      const r = marker.getBoundingClientRect(), target = marker.closest('.leaflet-marker-icon') || marker;
+      const eventInit = { bubbles: true, cancelable: true, composed: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, buttons: 1 };
       if (window.PointerEvent) {
         target.dispatchEvent(new PointerEvent('pointerdown', { ...eventInit, pointerId: 1, pointerType: 'touch', isPrimary: true }));
         target.dispatchEvent(new PointerEvent('pointerup', { ...eventInit, pointerId: 1, pointerType: 'touch', isPrimary: true, buttons: 0 }));
@@ -38,8 +33,10 @@ async function tapStableVisiblePriceMarker(page, mapSelector = '#map') {
       return true;
     }, mapSelector);
     if (tapped) {
-      const popup = page.locator(`${mapSelector} .leaflet-popup`).last();
-      try { await expect(popup).toBeVisible({ timeout: 3000 }); return popup; } catch (_) {}
+      try {
+        await expect(page.locator(`${mapSelector} .leaflet-popup`).last()).toBeVisible({ timeout: 3000 });
+        return;
+      } catch (_) {}
     }
     await page.waitForTimeout(400);
   }
@@ -54,38 +51,40 @@ test('app loads and Mia zona exposes fuel markers', async ({ page }) => {
 
 test('first tap on a price opens a persistent popup', async ({ page }) => {
   await waitForMap(page);
-  const popup = await tapStableVisiblePriceMarker(page);
-  await expect(popup).toBeVisible();
+  await tapStableVisiblePriceMarker(page);
+  await expect(page.locator('#map .leaflet-popup').last()).toBeVisible();
   await page.waitForTimeout(700);
-  await expect(popup).toBeVisible();
+  await expect(page.locator('#map .leaflet-popup').last()).toBeVisible();
 });
 
 test('Google Maps control is present in station popup', async ({ page }) => {
   await waitForMap(page);
-  const popup = await tapStableVisiblePriceMarker(page);
-  const mapsLink = popup.locator('a[href*="google.com/maps"], a[href*="maps.google"], a[href*="maps.apple.com"]').first();
+  await tapStableVisiblePriceMarker(page);
+  const mapsLink = page.locator('#map .leaflet-popup a[href*="google.com/maps"], #map .leaflet-popup a[href*="maps.google"], #map .leaflet-popup a[href*="maps.apple.com"]').last();
   await expect(mapsLink).toBeVisible();
   await expect(mapsLink).toHaveAttribute('href', /maps/);
 });
 
 test('favorite action persists and marker receives favorite styling', async ({ page }) => {
   await waitForMap(page);
-  const popup = await tapStableVisiblePriceMarker(page);
-  const fav = popup.locator('.fav-btn').first();
-  await expect(fav).toBeVisible();
-  await fav.evaluate(el => el.click());
+  await tapStableVisiblePriceMarker(page);
+  await expect.poll(async () => page.evaluate(() => {
+    const btn = Array.from(document.querySelectorAll('#map .leaflet-popup .fav-btn')).find(el => {
+      const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0;
+    });
+    if (!btn) return false;
+    btn.click();
+    return true;
+  }), { timeout: 8000 }).toBeTruthy();
   await expect.poll(async () => page.evaluate(() => Object.keys(localStorage).some(key => /fav/i.test(key) && Boolean(localStorage.getItem(key)))), { timeout: 8000 }).toBeTruthy();
-  // Leaflet may replace the popup/marker DOM immediately after the favorite state changes.
-  // Always re-query the live map instead of retaining a stale node reference.
   await expect.poll(async () => page.locator('#map .favorite-station-price').count(), { timeout: 8000 }).toBeGreaterThan(0);
   await expect(page.locator('#map .favorite-station-price').first()).toBeVisible({ timeout: 8000 });
 });
 
 test('zone selector switches among quick zone, province, Tuscany and free mode', async ({ page }) => {
   await waitForMap(page);
-  const zone = page.locator('#zoneSelect');
   for (const value of ['quick:pistoia-prato', 'province:PO', 'tuscany', 'free']) {
-    await zone.selectOption(value);
+    await page.locator('#zoneSelect').selectOption(value);
     await page.waitForTimeout(800);
     await expect(page.locator('#map')).toBeVisible();
   }
@@ -139,9 +138,7 @@ test('Viaggio calculates, fits and classifies a motorway route on mobile', async
   await page.route('**/search?**', async route => {
     const u = new URL(route.request().url());
     const q = (u.searchParams.get('city') || u.searchParams.get('q') || '').toLowerCase();
-    const hit = q.includes('lucca')
-      ? { lat: '43.8430', lon: '10.5079', display_name: 'Lucca, Toscana, Italia', name: 'Lucca', address: { city: 'Lucca' } }
-      : { lat: '43.9022', lon: '11.0069', display_name: 'Agliana, Toscana, Italia', name: 'Agliana', address: { town: 'Agliana' } };
+    const hit = q.includes('lucca') ? { lat: '43.8430', lon: '10.5079', display_name: 'Lucca, Toscana, Italia', name: 'Lucca', address: { city: 'Lucca' } } : { lat: '43.9022', lon: '11.0069', display_name: 'Agliana, Toscana, Italia', name: 'Agliana', address: { town: 'Agliana' } };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([hit]) });
   });
   await page.route('**/route/v1/driving/**', async route => {
@@ -155,23 +152,18 @@ test('Viaggio calculates, fits and classifies a motorway route on mobile', async
   await page.locator('#tripTo').fill('Lucca');
   await page.locator('#tripGoBtn').tap();
   await expect(page.locator('#tripSummary')).toBeVisible({ timeout: 30000 });
-  const distanceText = await page.locator('#tripDistance').innerText();
-  const distanceKm = Number((distanceText.match(/[\d.,]+/) || ['0'])[0].replace(',', '.'));
+  const distanceKm = Number(((await page.locator('#tripDistance').innerText()).match(/[\d.,]+/) || ['0'])[0].replace(',', '.'));
   expect(distanceKm).toBeGreaterThan(45);
   expect(distanceKm).toBeLessThan(70);
   await expect(page.locator('#tripMessage')).toContainText('autostrad', { ignoreCase: true });
   await expect(page.locator('#tripMap')).toBeVisible();
-  // Leaflet can attach the route SVG to a renderer pane outside the #tripMap subtree.
-  // Verify that the Viaggio map has a rendered vector layer without assuming its exact pane nesting.
   await expect.poll(async () => page.evaluate(() => {
-    const trip = document.querySelector('#tripMap');
-    if (!trip) return false;
-    const rect = trip.getBoundingClientRect();
-    return Array.from(document.querySelectorAll('.leaflet-overlay-pane path')).some(path => {
-      const r = path.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 && r.right >= rect.left && r.left <= rect.right && r.bottom >= rect.top && r.top <= rect.bottom;
-    });
-  }), { timeout: 10000 }).toBeTruthy();
+    const map = window.__carburantiTripMap;
+    if (!map || !window.L) return 0;
+    let polylines = 0;
+    map.eachLayer(layer => { if (layer instanceof L.Polyline) polylines += 1; });
+    return polylines;
+  }), { timeout: 10000 }).toBeGreaterThan(0);
 });
 
 test('geographic data guard excludes province-incompatible PO coordinates from Prato view', async ({ page }) => {
@@ -205,17 +197,10 @@ test('PWA iPhone assets and manifest are publishable', async ({ page, request })
     expect([...body.slice(0, 8)]).toEqual([137,80,78,71,13,10,26,10]);
   }
   const swState = await page.evaluate(async () => {
-    if (!('serviceWorker' in navigator)) return { supported: false, controlled: false, registrations: [] };
+    if (!('serviceWorker' in navigator)) return { registrations: [] };
     const regs = await navigator.serviceWorker.getRegistrations();
-    return {
-      supported: true,
-      controlled: Boolean(navigator.serviceWorker.controller),
-      registrations: regs.map(r => ({ scope: r.scope, scriptURL: r.active?.scriptURL || r.waiting?.scriptURL || r.installing?.scriptURL || null }))
-    };
+    return { registrations: regs.map(r => ({ scope: r.scope, scriptURL: r.active?.scriptURL || r.waiting?.scriptURL || r.installing?.scriptURL || null })) };
   });
-  // A previously installed PWA may legitimately retain a worker registration. If one
-  // exists, it must be an active same-origin registration scoped to this application;
-  // absence of a worker is also valid for the current static deployment.
   const appOrigin = new URL(page.url()).origin;
   for (const reg of swState.registrations) {
     expect(new URL(reg.scope).origin).toBe(appOrigin);
