@@ -4,38 +4,30 @@ async function waitForMap(page) {
   await page.goto('./', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#map')).toBeVisible();
   await expect(page.locator('#map .price-marker').first()).toBeVisible({ timeout: 30000 });
-  // Leaflet can rebuild marker DOM while startup location/zone logic settles.
-  // Wait for a short quiet period before attempting pointer interactions.
   await page.waitForTimeout(1200);
 }
 
-async function tapStableVisiblePriceMarker(page) {
-  await expect(page.locator('#map .price-marker').first()).toBeVisible({ timeout: 30000 });
-
+async function tapStableVisiblePriceMarker(page, mapSelector = '#map') {
+  await expect(page.locator(`${mapSelector} .price-marker`).first()).toBeVisible({ timeout: 30000 });
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const tapped = await page.evaluate(() => {
-      const map = document.querySelector('#map');
+    const tapped = await page.evaluate((selector) => {
+      const map = document.querySelector(selector);
       if (!map) return false;
       const mapRect = map.getBoundingClientRect();
       const candidates = Array.from(map.querySelectorAll('.price-marker'));
-
       const marker = candidates.find(el => {
         const r = el.getBoundingClientRect();
         const style = getComputedStyle(el);
         if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
         if (r.width < 1 || r.height < 1) return false;
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
         return cx >= mapRect.left + 4 && cx <= mapRect.right - 4 && cy >= mapRect.top + 4 && cy <= mapRect.bottom - 4;
       });
       if (!marker) return false;
-
       const r = marker.getBoundingClientRect();
-      const clientX = r.left + r.width / 2;
-      const clientY = r.top + r.height / 2;
+      const clientX = r.left + r.width / 2, clientY = r.top + r.height / 2;
       const target = marker.closest('.leaflet-marker-icon') || marker;
       const eventInit = { bubbles: true, cancelable: true, composed: true, clientX, clientY, button: 0, buttons: 1 };
-
       if (window.PointerEvent) {
         target.dispatchEvent(new PointerEvent('pointerdown', { ...eventInit, pointerId: 1, pointerType: 'touch', isPrimary: true }));
         target.dispatchEvent(new PointerEvent('pointerup', { ...eventInit, pointerId: 1, pointerType: 'touch', isPrimary: true, buttons: 0 }));
@@ -44,21 +36,14 @@ async function tapStableVisiblePriceMarker(page) {
       target.dispatchEvent(new MouseEvent('mouseup', { ...eventInit, buttons: 0 }));
       target.dispatchEvent(new MouseEvent('click', { ...eventInit, buttons: 0 }));
       return true;
-    });
-
+    }, mapSelector);
     if (tapped) {
-      const popup = page.locator('#map .leaflet-popup').last();
-      try {
-        await expect(popup).toBeVisible({ timeout: 3000 });
-        return popup;
-      } catch (_) {
-        // Leaflet may redraw after the event; retry against current DOM.
-      }
+      const popup = page.locator(`${mapSelector} .leaflet-popup`).last();
+      try { await expect(popup).toBeVisible({ timeout: 3000 }); return popup; } catch (_) {}
     }
     await page.waitForTimeout(400);
   }
-
-  throw new Error('No visible price marker opened a popup after DOM-dispatched tap');
+  throw new Error(`No visible price marker opened a popup in ${mapSelector}`);
 }
 
 test('app loads and Mia zona exposes fuel markers', async ({ page }) => {
@@ -88,29 +73,9 @@ test('favorite action persists and marker receives favorite styling', async ({ p
   const popup = await tapStableVisiblePriceMarker(page);
   const fav = popup.locator('.fav-btn').first();
   await expect(fav).toBeVisible();
-
-  // The application/Leaflet may destroy and recreate the popup immediately
-  // after the favorite click. Do not retain/assert against the stale popup DOM.
   await fav.evaluate(el => el.click());
-
-  // Verify the durable result instead: favorite state is persisted and the
-  // current marker DOM is rebuilt with the favorite class (gold halo/border).
-  await expect.poll(async () => page.evaluate(() => {
-    try {
-      const raw = localStorage.getItem('favoriteStations');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return true;
-        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) return true;
-      }
-      return Object.keys(localStorage).some(key => /fav/i.test(key) && localStorage.getItem(key));
-    } catch (_) {
-      return false;
-    }
-  }), { timeout: 5000 }).toBeTruthy();
-
-  const favoriteMarkers = page.locator('#map .favorite-station-price');
-  await expect(favoriteMarkers.first()).toBeVisible({ timeout: 5000 });
+  await expect.poll(async () => page.evaluate(() => Object.keys(localStorage).some(key => /fav/i.test(key) && localStorage.getItem(key))), { timeout: 5000 }).toBeTruthy();
+  await expect(page.locator('#map .favorite-station-price').first()).toBeVisible({ timeout: 5000 });
 });
 
 test('zone selector switches among quick zone, province, Tuscany and free mode', async ({ page }) => {
@@ -131,4 +96,109 @@ test('Viaggio panel opens and route form remains usable on mobile', async ({ pag
   await expect(page.locator('#tripTo')).toBeVisible();
   await expect(page.locator('#tripGoBtn')).toBeVisible();
   await expect(page.locator('#tripCloseBtn')).toBeVisible();
+});
+
+// 1. Geolocation regression: deterministic simulated position, never the runner's real position.
+test('simulated geolocation centers Mia zona coherently', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 43.9022, longitude: 11.0069, accuracy: 20 });
+  await page.addInitScript(() => localStorage.removeItem('carburanti:last-position:v1'));
+  await waitForMap(page);
+  await page.locator('#zoneSelect').selectOption('position');
+  await page.locator('#locateBtn').tap();
+  await expect.poll(() => page.evaluate(() => window.CarburantiApp?.getUserPosition?.() || null), { timeout: 15000 }).not.toBeNull();
+  const pos = await page.evaluate(() => window.CarburantiApp.getUserPosition());
+  expect(Math.abs(pos.lat - 43.9022)).toBeLessThan(0.01);
+  expect(Math.abs(pos.lon - 11.0069)).toBeLessThan(0.01);
+  const center = await page.evaluate(() => { const c = window.CarburantiApp?.getMap?.()?.getCenter?.(); return c ? { lat: c.lat, lon: c.lng } : null; });
+  if (center) {
+    expect(Math.abs(center.lat - 43.9022)).toBeLessThan(0.12);
+    expect(Math.abs(center.lon - 11.0069)).toBeLessThan(0.12);
+  }
+  await expect(page.locator('#zoneSelect')).toHaveValue('position');
+});
+
+// 2. Fuel switching and zone-relative price colour contract.
+test('fuel switch recalculates valid price colours in the displayed zone', async ({ page }) => {
+  await waitForMap(page);
+  await page.locator('#zoneSelect').selectOption('quick:pistoia-prato');
+  await page.waitForTimeout(900);
+  for (const fuel of ['benzina', 'gasolio']) {
+    await page.locator(`.fuel-tab[data-fuel="${fuel}"]`).tap();
+    await expect(page.locator(`.fuel-tab[data-fuel="${fuel}"]`)).toHaveClass(/active/);
+    await expect(page.locator('#map .price-marker').first()).toBeVisible({ timeout: 10000 });
+    const classes = await page.locator('#map .price-marker').evaluateAll(nodes => nodes.map(n => [...n.classList].find(c => ['best','near','good','normal'].includes(c))).filter(Boolean));
+    expect(classes.length).toBeGreaterThan(0);
+    expect(classes.every(c => ['best','near','good','normal'].includes(c))).toBeTruthy();
+    expect(classes).toContain('best');
+  }
+});
+
+// 3. Complete Viaggio flow with deterministic geocoding/routing, including motorway detection.
+test('Viaggio calculates, fits and classifies a motorway route on mobile', async ({ page }) => {
+  await page.route('**/search?**', async route => {
+    const u = new URL(route.request().url());
+    const q = (u.searchParams.get('city') || u.searchParams.get('q') || '').toLowerCase();
+    const hit = q.includes('lucca')
+      ? { lat: '43.8430', lon: '10.5079', display_name: 'Lucca, Toscana, Italia', name: 'Lucca', address: { city: 'Lucca' } }
+      : { lat: '43.9022', lon: '11.0069', display_name: 'Agliana, Toscana, Italia', name: 'Agliana', address: { town: 'Agliana' } };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([hit]) });
+  });
+  await page.route('**/route/v1/driving/**', async route => {
+    const coords = [[11.0069,43.9022],[10.90,43.89],[10.75,43.87],[10.60,43.85],[10.5079,43.8430]];
+    const payload = { code: 'Ok', routes: [{ distance: 52000, duration: 3000, geometry: { type: 'LineString', coordinates: coords }, legs: [{ steps: [{ name: 'A11 Autostrada Firenze-Mare', ref: 'A11', distance: 44000, geometry: { coordinates: coords.slice(0,4) } }, { name: 'Viabilità urbana', ref: '', distance: 8000, geometry: { coordinates: coords.slice(3) } }] }] }] };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
+  });
+  await waitForMap(page);
+  await page.locator('#tripOpenBtn').tap();
+  await page.locator('#tripFrom').fill('Agliana');
+  await page.locator('#tripTo').fill('Lucca');
+  await page.locator('#tripGoBtn').tap();
+  await expect(page.locator('#tripSummary')).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('#tripDistance')).toContainText('52 km');
+  await expect(page.locator('#tripMessage')).toContainText('autostrad', { ignoreCase: true });
+  await expect(page.locator('#tripMap .leaflet-overlay-pane path').first()).toBeVisible();
+  await expect(page.locator('#tripMap')).toBeVisible();
+});
+
+// 4. Runtime geographic guard: a Prato-labelled station with Rome coordinates must never survive as PO.
+test('geographic data guard excludes province-incompatible PO coordinates from Prato view', async ({ page }) => {
+  await waitForMap(page);
+  await page.locator('#zoneSelect').selectOption('province:PO');
+  await page.waitForTimeout(900);
+  const bad = await page.evaluate(async () => {
+    const p = await fetch('data/stations.json?e2e-geoguard=1', { cache: 'no-store' }).then(r => r.json());
+    return p.stations.filter(s => s.province === 'PO' && (s.lat < 43.55 || s.lat > 44.30 || s.lon < 10.60 || s.lon > 11.55)).map(s => ({ id: s.id, lat: s.lat, lon: s.lon, city: s.city }));
+  });
+  expect(bad).toEqual([]);
+});
+
+// 6. PWA/iPhone static contract: manifest, Apple touch icon, generated icons and no stale SW controller.
+test('PWA iPhone assets and manifest are publishable', async ({ page, request }) => {
+  await page.goto('./', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="apple-touch-icon"][sizes="180x180"]')).toHaveCount(1);
+  const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
+  const manifestResponse = await request.get(new URL(manifestHref, page.url()).toString());
+  expect(manifestResponse.ok()).toBeTruthy();
+  const manifest = await manifestResponse.json();
+  expect(manifest.name).toBe('Carburanti');
+  expect(manifest.display).toBe('standalone');
+  expect(manifest.icons.some(i => i.sizes === '192x192')).toBeTruthy();
+  expect(manifest.icons.some(i => i.sizes === '512x512')).toBeTruthy();
+  for (const icon of ['carburanti-green-180.png', 'carburanti-green-192.png', 'carburanti-green-512.png']) {
+    const r = await request.get(new URL(icon, page.url()).toString());
+    expect(r.ok()).toBeTruthy();
+    const body = await r.body();
+    expect(body.length).toBeGreaterThan(1000);
+    expect([...body.slice(0, 8)]).toEqual([137,80,78,71,13,10,26,10]);
+  }
+  const swState = await page.evaluate(async () => {
+    if (!('serviceWorker' in navigator)) return { supported: false, controlled: false, registrations: 0 };
+    const regs = await navigator.serviceWorker.getRegistrations();
+    return { supported: true, controlled: Boolean(navigator.serviceWorker.controller), registrations: regs.length };
+  });
+  // The app intentionally has no service worker: this assertion prevents an obsolete cached worker from returning.
+  expect(swState.controlled).toBeFalsy();
+  expect(swState.registrations).toBe(0);
 });
