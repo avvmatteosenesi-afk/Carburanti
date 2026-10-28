@@ -30,18 +30,15 @@
 
   function isFavoriteMarker(wrap, ids) {
     const marker = markerFromElement(wrap);
-    const ll = marker?.getLatLng?.();
+    if (!marker) return false;
+    const registry = window.CarburantiApp?.state?.markerById;
+    if (registry?.entries) {
+      const direct = Array.from(registry.entries()).find(([, m]) => m === marker);
+      if (direct && ids.has(String(direct[0]))) return true;
+    }
+    const ll = marker.getLatLng?.();
     if (!ll) return false;
-
-    // Match by coordinates against both the Tuscany and national datasets,
-    // then test every matching station ID. This remains reliable even when
-    // the two datasets use different objects/IDs for the same installation.
-    return stations.some(s =>
-      ids.has(String(s.id)) &&
-      Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon)) &&
-      Math.abs(Number(s.lat) - ll.lat) < 1e-5 &&
-      Math.abs(Number(s.lon) - ll.lng) < 1e-5
-    );
+    return stations.some(s => ids.has(String(s.id)) && Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon)) && Math.abs(Number(s.lat)-ll.lat)<1e-5 && Math.abs(Number(s.lon)-ll.lng)<1e-5);
   }
 
   function setFavoriteStyle(price, isFavorite) {
@@ -68,6 +65,14 @@
     }
   }
 
+  function applyDirect(id, favorite) {
+    const marker = window.CarburantiApp?.state?.markerById?.get?.(String(id));
+    const wrap = marker?.getElement?.() || marker?._icon;
+    const price = wrap?.querySelector?.('.price-marker');
+    if (price) setFavoriteStyle(price, favorite);
+    queueApply();
+  }
+
   function queueApply() {
     if (refreshQueued) return;
     refreshQueued = true;
@@ -75,18 +80,22 @@
   }
 
   async function loadStations() {
-    const urls = ['data/stations.json?v=20261025-fav3', 'data/stations-it.json?v=20261025-fav3'];
-    const all = [];
-    await Promise.all(urls.map(async url => {
-      try {
-        const r = await fetch(url, { cache: 'no-store' });
-        if (!r.ok) return;
+    try {
+      const r = await fetch('data/stations.json?v=20261028-fav4', { cache: 'no-store' });
+      if (r.ok) {
         const j = await r.json();
-        if (Array.isArray(j.stations)) all.push(...j.stations);
-      } catch (_) {}
-    }));
-    stations = all;
-    queueApply();
+        if (Array.isArray(j.stations)) stations = j.stations;
+        queueApply();
+      }
+    } catch (_) {}
+    try {
+      const r = await fetch('data/stations-it.json?v=20261028-fav4', { cache: 'no-store' });
+      if (r.ok) {
+        const j = await r.json();
+        if (Array.isArray(j.stations)) stations.push(...j.stations);
+        queueApply();
+      }
+    } catch (_) {}
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -96,14 +105,8 @@
       const el = document.getElementById(id);
       if (el) observer.observe(el, { childList: true, subtree: true });
     });
-
-    document.addEventListener('click', e => {
-      if (e.target?.closest?.('.fav-btn')) {
-        setTimeout(queueApply, 20);
-        setTimeout(queueApply, 120);
-        setTimeout(queueApply, 350);
-      }
-    }, true);
+    window.addEventListener('carburanti:favorites-changed', e => applyDirect(e.detail?.id, Boolean(e.detail?.favorite)));
+    document.addEventListener('click', e => { if (e.target?.closest?.('.fav-btn')) setTimeout(queueApply, 30); }, true);
     window.addEventListener('storage', e => { if (e.key === FKEY) queueApply(); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) queueApply(); });
     setInterval(queueApply, 1200);
