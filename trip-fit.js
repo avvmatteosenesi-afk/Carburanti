@@ -21,7 +21,7 @@
     }
   }
 
-  function fitBoundsBalanced(bounds, maxZoom = 14) {
+  function fitBoundsBalanced(bounds, maxZoom = 14, liftRoute = false) {
     const map = getMap();
     if (!map || !bounds?.isValid?.()) return false;
 
@@ -43,10 +43,15 @@
         animate: false
       });
 
-      // Leaflet normalmente centra già i bounds; questo secondo passaggio elimina
-      // piccoli scostamenti dovuti al ridimensionamento tardivo del pannello su iOS.
       const zoom = map.getZoom();
       map.setView(bounds.getCenter(), zoom, { animate: false });
+
+      // Dopo il calcolo del viaggio sposta sensibilmente il percorso verso
+      // la parte alta della mappa, lasciando più spazio utile sotto.
+      if (liftRoute) {
+        const liftPx = clamp(Math.round(size.y * 0.18), 55, 105);
+        map.panBy([0, liftPx], { animate: false });
+      }
       return true;
     } catch (_) {
       return false;
@@ -61,7 +66,7 @@
     const bounds = line.getBounds?.();
     if (!bounds?.isValid?.()) return false;
     lastRouteBounds = bounds;
-    return fitBoundsBalanced(bounds, 14);
+    return fitBoundsBalanced(bounds, 14, true);
   }
 
   function settleRouteView() {
@@ -111,7 +116,7 @@
       const panel = document.getElementById('tripPanel');
       if (!panel || panel.classList.contains('hidden')) return;
       if (lastRouteBounds) {
-        fitBoundsBalanced(lastRouteBounds, 14);
+        fitBoundsBalanced(lastRouteBounds, 14, true);
       } else {
         fitInitialView();
       }
