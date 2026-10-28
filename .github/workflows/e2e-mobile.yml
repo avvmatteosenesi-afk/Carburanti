@@ -4,15 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - '*.js'
-      - '*.html'
-      - '*.css'
-      - 'tests/e2e/**'
-      - 'playwright.config.js'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/e2e-mobile.yml'
   schedule:
     - cron: '41 5 * * *'
 
