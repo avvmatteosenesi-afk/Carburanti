@@ -19,6 +19,10 @@ body[data-layout] .fuel-tab,body[data-layout] #zoneSelect,body[data-layout] .sma
 body[data-layout] .fuel-tab.active{background:color-mix(in srgb,var(--theme-accent) 88%,white);color:#fff}
 body[data-layout] .wide-btn{background:var(--theme-accent)}
 body[data-layout] .map-card{border-color:var(--theme-edge);box-shadow:0 3px 0 color-mix(in srgb,var(--theme-edge) 25%,transparent)}
+/* Baseline invariant: minimum and average price cards are always visible at the bottom of the map in every selectable layout. */
+body[data-layout] .map-stats{display:grid!important;grid-template-columns:1fr 1fr!important;position:absolute!important;left:7px!important;right:7px!important;bottom:7px!important;z-index:740!important;visibility:visible!important;opacity:1!important;pointer-events:none}
+body[data-layout] .map-stats .stat-card{display:block!important;visibility:visible!important;opacity:1!important;background:rgba(255,255,255,.95)!important;color:#17212b!important;border-color:color-mix(in srgb,var(--theme-edge) 38%,#dfe5ea)!important;pointer-events:auto}
+body[data-layout] .map-stats .stat-label,body[data-layout] .map-stats .stat-detail{color:#5e6874!important}
 body[data-layout] .quick-strip,body[data-layout] .quick-choices,body[data-layout] .home-quick,body[data-layout] [class*="quick"]{backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
 body[data-layout] .quick-strip,body[data-layout] .quick-choices,body[data-layout] .home-quick{background:rgba(255,255,255,.62)!important;border-color:var(--theme-edge)!important}
 body[data-layout="dragon"]{--theme-bg:#e7f5ff;--theme-top-a:#0a47aa;--theme-top-b:#a33dff;--theme-accent:#147cff;--theme-soft:#eef7ff;--theme-edge:#18234d;--theme-glow:0 0 18px rgba(80,190,255,.45);--theme-art:url("https://images.everyeye.it/img-notizie/chi-riesce-davvero-padroneggiare-ultra-istinto-dragon-ball-classifica-v3-828308-1200x1200.webp");--theme-pos:left top;--theme-size:auto 330px}
