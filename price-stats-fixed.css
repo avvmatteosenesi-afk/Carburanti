@@ -1,0 +1,31 @@
+/* UI invariant: minimum and average price cards must remain inside the visible viewport in every layout, including Classico. */
+.map-stats{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  position:fixed!important;
+  left:max(10px,env(safe-area-inset-left))!important;
+  right:max(10px,env(safe-area-inset-right))!important;
+  bottom:max(10px,env(safe-area-inset-bottom))!important;
+  width:auto!important;
+  max-width:880px!important;
+  margin:0 auto!important;
+  z-index:1900!important;
+  visibility:visible!important;
+  opacity:1!important;
+  pointer-events:none!important;
+}
+.map-stats .stat-card{
+  display:block!important;
+  min-width:0!important;
+  visibility:visible!important;
+  opacity:1!important;
+  background:rgba(255,255,255,.96)!important;
+  color:#17212b!important;
+  box-shadow:0 3px 12px rgba(0,0,0,.22)!important;
+  pointer-events:auto!important;
+}
+.map-stats .stat-label,.map-stats .stat-detail{color:#5e6874!important}
+@media (max-width:700px){
+  .map-stats{left:max(7px,env(safe-area-inset-left))!important;right:max(7px,env(safe-area-inset-right))!important;bottom:max(7px,env(safe-area-inset-bottom))!important;gap:5px!important}
+  .map-stats .stat-card{padding:7px 8px!important}
+}
