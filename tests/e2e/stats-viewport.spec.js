@@ -1,6 +1,6 @@
 const { test, expect, devices } = require('@playwright/test');
 
-const layouts = ['current','dragon','arale','daitarn','devilman','jeeg','harlock','mazinga','goldrake','lamu'];
+const layouts = ['current','dragon','arale','daitarn','devilman','jeeg','harlock','mazinga','goldrake','lamu','kenshiro','candy','yattaman','lupin','oscar'];
 
 async function assertInsideViewport(page, selector) {
   const box = await page.locator(selector).boundingBox();
@@ -39,8 +39,6 @@ test('minimum and average cards remain visible inside iPhone viewport in every l
 
 test('themed price cards stay viewport-anchored while the document scrolls', async ({ page }) => {
   await page.goto('./', { waitUntil: 'domcontentloaded' });
-  // The classic layout deliberately preserves the original base behaviour.
-  // Viewport-fixed stats are a themed-layout rule, so exercise that invariant explicitly.
   await page.evaluate(() => {
     localStorage.setItem('carburanti:layout:v2', 'dragon');
     document.body.dataset.layout = 'dragon';
