@@ -65,7 +65,7 @@ jobs:
       - name: Install Playwright test dependencies
         run: |
           npm install
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
 
       - name: Run mobile viewport E2E tests
         run: npm run test:e2e
