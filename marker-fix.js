@@ -37,8 +37,8 @@
     const root = popup?.getElement?.();
     if (!root) return;
     installPopupCloseButton(popup, root);
-    if (root.__carburantiProtectedV30) return;
-    root.__carburantiProtectedV30 = true;
+    if (root.__carburantiProtectedV31) return;
+    root.__carburantiProtectedV31 = true;
     root.style.pointerEvents = 'auto';
     try { L.DomEvent.disableClickPropagation(root); } catch (_) {}
     try { L.DomEvent.disableScrollPropagation(root); } catch (_) {}
@@ -85,6 +85,7 @@
     try { marker._map?.closePopup(); } catch (_) {}
     marker.openPopup();
     protectPopup(popup);
+    requestAnimationFrame(() => protectPopup(popup));
   }
 
   function centerThenOpen(marker) {
@@ -144,7 +145,7 @@
     if (popupPane) { popupPane.style.zIndex = '1000'; popupPane.style.pointerEvents = 'auto'; }
     const stationPane = map.getPane?.('stationPane'); if (stationPane) stationPane.style.pointerEvents = 'auto';
     const userPane = map.getPane?.('userPane'); if (userPane) { userPane.style.zIndex = '800'; userPane.style.pointerEvents = 'none'; }
-    if (!map.__carburantiPopupV30) { map.__carburantiPopupV30 = true; map.on('popupopen', e => protectPopup(e.popup)); }
+    if (!map.__carburantiPopupV31) { map.__carburantiPopupV31 = true; map.on('popupopen', e => { protectPopup(e.popup); requestAnimationFrame(() => protectPopup(e.popup)); }); }
     return true;
   }
 
@@ -157,15 +158,12 @@
     window.addEventListener('carburanti:location', () => { requestAnimationFrame(refresh); setTimeout(refresh, 100); setTimeout(refresh, 350); });
     document.getElementById('zoneSelect')?.addEventListener('change', () => { requestAnimationFrame(refresh); setTimeout(refresh, 100); setTimeout(refresh, 350); });
 
-    // WebKit/iOS: pointerup è il percorso primario. Evitiamo di processare anche
-    // touchend/click della stessa gesture, che potevano annullare il primo tap.
     mapEl.addEventListener('pointerdown', ev => { const marker = markerForElement(ev.target); if (marker) preparePopup(marker); }, { capture: true, passive: true });
     mapEl.addEventListener('pointerup', ev => {
       if (ev.target?.closest?.('.leaflet-popup')) return;
       openFromPriceElement(ev.target, ev);
     }, { capture: true, passive: false });
 
-    // Fallback per browser senza Pointer Events.
     if (!window.PointerEvent) {
       mapEl.addEventListener('touchstart', ev => { const marker = markerForElement(ev.target); if (marker) preparePopup(marker); }, { capture: true, passive: true });
       mapEl.addEventListener('touchend', ev => { if (!ev.target?.closest?.('.leaflet-popup')) openFromPriceElement(ev.target, ev); }, { capture: true, passive: false });
