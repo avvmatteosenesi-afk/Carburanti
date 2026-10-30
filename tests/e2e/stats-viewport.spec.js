@@ -37,8 +37,14 @@ test('minimum and average cards remain visible inside iPhone viewport in every l
   }
 });
 
-test('price cards stay viewport-anchored while the document scrolls', async ({ page }) => {
+test('themed price cards stay viewport-anchored while the document scrolls', async ({ page }) => {
   await page.goto('./', { waitUntil: 'domcontentloaded' });
+  // The classic layout deliberately preserves the original base behaviour.
+  // Viewport-fixed stats are a themed-layout rule, so exercise that invariant explicitly.
+  await page.evaluate(() => {
+    localStorage.setItem('carburanti:layout:v2', 'dragon');
+    document.body.dataset.layout = 'dragon';
+  });
   await expect(page.locator('.map-stats')).toBeVisible();
   const before = await page.locator('.map-stats').boundingBox();
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
