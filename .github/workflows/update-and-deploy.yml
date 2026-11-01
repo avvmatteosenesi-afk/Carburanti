@@ -61,14 +61,38 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
 
       - name: Install Playwright test dependencies
         run: |
-          npm install
+          npm ci
           npx playwright install --with-deps chromium webkit
 
       - name: Run mobile viewport E2E tests
         run: npm run test:e2e
+
+      - name: Build clean Pages artifact
+        shell: bash
+        run: |
+          rm -rf _site
+          mkdir _site
+          rsync -a ./ _site/ \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '_site/' \
+            --exclude 'node_modules/' \
+            --exclude 'tests/' \
+            --exclude 'test-results/' \
+            --exclude 'playwright-report/' \
+            --exclude 'scripts/' \
+            --exclude 'package.json' \
+            --exclude 'package-lock.json' \
+            --exclude 'playwright.config.js' \
+            --exclude '*.log'
+          test -s _site/index.html
+          test -s _site/data/stations.json
+          test -s _site/data/stations-it.json
+          test -s _site/manifest.webmanifest
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -78,7 +102,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
       - name: Deploy to GitHub Pages
         id: deployment
