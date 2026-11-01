@@ -10,30 +10,18 @@ async function waitForMap(page) {
 async function tapStableVisiblePriceMarker(page, mapSelector = '#map') {
   await expect(page.locator(`${mapSelector} .price-marker`).first()).toBeVisible({ timeout: 30000 });
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const tapped = await page.evaluate((selector) => {
-      const map = document.querySelector(selector);
-      if (!map) return false;
-      const mapRect = map.getBoundingClientRect();
-      const marker = Array.from(map.querySelectorAll('.price-marker')).find(el => {
-        const r = el.getBoundingClientRect(), style = getComputedStyle(el);
-        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || r.width < 1 || r.height < 1) return false;
-        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        return cx >= mapRect.left + 4 && cx <= mapRect.right - 4 && cy >= mapRect.top + 4 && cy <= mapRect.bottom - 4;
-      });
-      if (!marker) return false;
-      const r = marker.getBoundingClientRect(), target = marker.closest('.leaflet-marker-icon') || marker;
-      const eventInit = { bubbles: true, cancelable: true, composed: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, buttons: 1 };
-      if (window.PointerEvent) {
-        target.dispatchEvent(new PointerEvent('pointerdown', { ...eventInit, pointerId: 1, pointerType: 'touch', isPrimary: true }));
-        target.dispatchEvent(new PointerEvent('pointerup', { ...eventInit, pointerId: 1, pointerType: 'touch', isPrimary: true, buttons: 0 }));
-      }
-      target.dispatchEvent(new MouseEvent('mousedown', eventInit));
-      target.dispatchEvent(new MouseEvent('mouseup', { ...eventInit, buttons: 0 }));
-      target.dispatchEvent(new MouseEvent('click', { ...eventInit, buttons: 0 }));
-      return true;
-    }, mapSelector);
-    if (tapped) {
+    const wrappers = page.locator(`${mapSelector} .price-marker-wrap`);
+    const count = await wrappers.count();
+    for (let i = 0; i < count; i += 1) {
+      const wrapper = wrappers.nth(i);
+      const box = await wrapper.boundingBox();
+      const mapBox = await page.locator(mapSelector).boundingBox();
+      if (!box || !mapBox) continue;
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      if (cx < mapBox.x + 4 || cx > mapBox.x + mapBox.width - 4 || cy < mapBox.y + 4 || cy > mapBox.y + mapBox.height - 4) continue;
       try {
+        await wrapper.tap({ timeout: 2000 });
         await expect(page.locator(`${mapSelector} .leaflet-popup`).last()).toBeVisible({ timeout: 3000 });
         return;
       } catch (_) {}
@@ -68,14 +56,9 @@ test('Google Maps control is present in station popup', async ({ page }) => {
 test('favorite action persists and marker receives favorite styling', async ({ page }) => {
   await waitForMap(page);
   await tapStableVisiblePriceMarker(page);
-  await expect.poll(async () => page.evaluate(() => {
-    const btn = Array.from(document.querySelectorAll('#map .leaflet-popup .fav-btn')).find(el => {
-      const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0;
-    });
-    if (!btn) return false;
-    btn.click();
-    return true;
-  }), { timeout: 8000 }).toBeTruthy();
+  const fav = page.locator('#map .leaflet-popup .fav-btn:visible').last();
+  await expect(fav).toBeVisible({ timeout: 8000 });
+  await fav.tap();
   await expect.poll(async () => page.evaluate(() => Object.keys(localStorage).some(key => /fav/i.test(key) && Boolean(localStorage.getItem(key)))), { timeout: 8000 }).toBeTruthy();
   await expect.poll(async () => page.locator('#map .favorite-station-price').count(), { timeout: 8000 }).toBeGreaterThan(0);
   await expect(page.locator('#map .favorite-station-price').first()).toBeVisible({ timeout: 8000 });
