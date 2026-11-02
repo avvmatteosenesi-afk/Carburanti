@@ -30,21 +30,12 @@ STATIONS_URL = "https://www.mimit.gov.it/images/exportCSV/anagrafica_impianti_at
 PRICES_URL = "https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv"
 
 TUSCANY_PROVINCES = {"AR", "FI", "GR", "LI", "LU", "MS", "PI", "PT", "PO", "SI"}
-
-# Bounding box prudenziali: servono a eliminare coordinate manifestamente incompatibili
-# con la provincia dichiarata (es. impianto PO con coordinate a Roma), non a ricostruire
-# i confini amministrativi al metro.
 PROVINCE_BOUNDS = {
-    "AR": (43.15, 11.30, 43.86, 12.22),
-    "FI": (43.37, 10.58, 44.24, 11.82),
-    "GR": (42.18, 10.50, 43.29, 11.78),
-    "LI": (42.68, 9.65, 43.67, 10.78),
-    "LU": (43.64, 10.00, 44.36, 10.84),
-    "MS": (43.91, 9.68, 44.55, 10.42),
-    "PI": (43.28, 10.20, 43.91, 11.02),
-    "PT": (43.73, 10.50, 44.25, 11.14),
-    "PO": (43.72, 10.84, 44.19, 11.31),
-    "SI": (42.83, 10.70, 43.65, 11.91),
+    "AR": (43.15, 11.30, 43.86, 12.22), "FI": (43.37, 10.58, 44.24, 11.82),
+    "GR": (42.18, 10.50, 43.29, 11.78), "LI": (42.68, 9.65, 43.67, 10.78),
+    "LU": (43.64, 10.00, 44.36, 10.84), "MS": (43.91, 9.68, 44.55, 10.42),
+    "PI": (43.28, 10.20, 43.91, 11.02), "PT": (43.73, 10.50, 44.25, 11.14),
+    "PO": (43.72, 10.84, 44.19, 11.31), "SI": (42.83, 10.70, 43.65, 11.91),
 }
 
 UA = "Carburanti-PWA/1.0 (+GitHub Pages; MIMIT open data)"
@@ -54,13 +45,18 @@ def fetch_bytes(url: str, timeout: int = 45, attempts: int = 2) -> bytes:
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
+            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*", "Cache-Control": "no-cache"})
             with urllib.request.urlopen(req, timeout=timeout) as response:
-                return response.read()
+                raw = response.read()
+                if not raw:
+                    raise RuntimeError("risposta vuota")
+                return raw
         except Exception as exc:
             last_error = exc
             if attempt < attempts:
-                time.sleep(3 * attempt)
+                delay = min(12, 2 ** attempt)
+                print(f"Tentativo {attempt}/{attempts} fallito per {url}: {exc}; nuovo tentativo tra {delay}s…", flush=True)
+                time.sleep(delay)
     raise last_error
 
 
@@ -77,40 +73,48 @@ def fetch_text(url: str, timeout: int = 45, attempts: int = 2) -> str:
     return decode_csv(fetch_bytes(url, timeout=timeout, attempts=attempts))
 
 
+def validate_mimit_csv(text: str, label: str) -> None:
+    sample = "\n".join(text.splitlines()[:25])
+    if "idimpianto" not in norm_key(sample):
+        raise RuntimeError(f"{label}: contenuto MIMIT non riconosciuto")
+
+
 def fetch_mimit_pair():
-    """Preferisce MIMIT live; se non risponde usa l'ultimo snapshot MIMIT archiviato."""
+    """Preferisce MIMIT live con retry; se non risponde usa l'ultimo snapshot archiviato."""
+    live_error = None
     try:
-        print("Download anagrafica MIMIT live…", flush=True)
-        stations_text = fetch_text(STATIONS_URL, timeout=15, attempts=1)
-        print("Download prezzi MIMIT live…", flush=True)
-        prices_text = fetch_text(PRICES_URL, timeout=15, attempts=1)
+        print("Download anagrafica MIMIT live (fino a 3 tentativi)…", flush=True)
+        stations_text = fetch_text(STATIONS_URL, timeout=25, attempts=3)
+        validate_mimit_csv(stations_text, "Anagrafica live")
+        print("Download prezzi MIMIT live (fino a 3 tentativi)…", flush=True)
+        prices_text = fetch_text(PRICES_URL, timeout=25, attempts=3)
+        validate_mimit_csv(prices_text, "Prezzi live")
         return stations_text, prices_text, {
-            "mode": "mimit-live",
-            "stations_url": STATIONS_URL,
-            "prices_url": PRICES_URL,
-            "snapshot_date": None,
+            "mode": "mimit-live", "stations_url": STATIONS_URL,
+            "prices_url": PRICES_URL, "snapshot_date": None,
         }
     except Exception as exc:
-        print(f"MIMIT live non raggiungibile ({exc}); uso fallback archivio giornaliero…", flush=True)
+        live_error = exc
+        print(f"MIMIT live non raggiungibile dopo i retry ({exc}); uso fallback archivio giornaliero…", flush=True)
 
     meta_url = "https://raw.githubusercontent.com/LucaDDDD/benzina-data/main/data/last_update.json"
-    meta = json.loads(fetch_text(meta_url, timeout=30, attempts=2))
+    meta = json.loads(fetch_text(meta_url, timeout=30, attempts=3))
     date_text = str(meta.get("ultima_estrazione") or "").strip()
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_text):
-        raise RuntimeError("Fallback MIMIT: data snapshot non valida")
+        raise RuntimeError(f"Fallback MIMIT: data snapshot non valida; errore live: {live_error}")
     dt = datetime.strptime(date_text, "%Y-%m-%d")
     stamp = dt.strftime("%Y%m%d")
     base = f"https://raw.githubusercontent.com/LucaDDDD/benzina-data/main/data/{dt:%Y/%m}"
     stations_url = f"{base}/anagrafica_impianti_attivi-{stamp}.csv.gz"
     prices_url = f"{base}/prezzo_alle_8-{stamp}.csv.gz"
-    stations_text = decode_csv(gzip.decompress(fetch_bytes(stations_url, timeout=60, attempts=2)))
-    prices_text = decode_csv(gzip.decompress(fetch_bytes(prices_url, timeout=60, attempts=2)))
+    stations_text = decode_csv(gzip.decompress(fetch_bytes(stations_url, timeout=60, attempts=3)))
+    prices_text = decode_csv(gzip.decompress(fetch_bytes(prices_url, timeout=60, attempts=3)))
+    validate_mimit_csv(stations_text, "Anagrafica fallback")
+    validate_mimit_csv(prices_text, "Prezzi fallback")
     print(f"Fallback MIMIT caricato: snapshot {date_text}", flush=True)
     return stations_text, prices_text, {
-        "mode": "mimit-archive-fallback",
-        "stations_url": stations_url,
-        "prices_url": prices_url,
-        "snapshot_date": date_text,
+        "mode": "mimit-archive-fallback", "stations_url": stations_url,
+        "prices_url": prices_url, "snapshot_date": date_text,
     }
 
 
@@ -155,13 +159,7 @@ def parse_date(value: str):
     value = (value or "").strip()
     if not value:
         return None
-    fmts = (
-        "%d/%m/%Y %H:%M:%S",
-        "%d/%m/%Y %H:%M",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S%z",
-    )
+    fmts = ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S%z")
     for fmt in fmts:
         try:
             dt = datetime.strptime(value, fmt)
@@ -180,29 +178,15 @@ def iso_date(value: str) -> str | None:
 
 def fuel_key(desc: str):
     t = norm_text(desc)
-    # Solo carburanti BASE: nessun match per prefisso, così le varianti premium
-    # (Blue Diesel, HVO, 100 ottani, additivate, ecc.) restano escluse.
-    if t in {"benzina", "benzina self"}:
-        return "benzina"
-    if t in {"gasolio", "gasolio self", "diesel", "diesel self"}:
-        return "gasolio"
-    if t in {"gpl", "gpl self"}:
-        return "gpl"
-    if t in {"metano", "metano self", "cng", "cng self"}:
-        return "metano"
+    if t in {"benzina", "benzina self"}: return "benzina"
+    if t in {"gasolio", "gasolio self", "diesel", "diesel self"}: return "gasolio"
+    if t in {"gpl", "gpl self"}: return "gpl"
+    if t in {"metano", "metano self", "cng", "cng self"}: return "metano"
     return None
 
 
 def validate_fuel_classifier():
-    tests = {
-        "Benzina": "benzina", "Benzina Self": "benzina",
-        "Gasolio": "gasolio", "Gasolio Self": "gasolio", "Diesel": "gasolio",
-        "GPL": "gpl", "Metano": "metano",
-        "Blue Diesel": None, "Diesel+": None, "Gasolio Premium": None,
-        "Gasolio Self Premium": None, "HVOlution": None,
-        "Benzina 100 Ottani": None, "Benzina Self 100 Ottani": None,
-        "Benzina Premium": None,
-    }
+    tests = {"Benzina":"benzina","Benzina Self":"benzina","Gasolio":"gasolio","Gasolio Self":"gasolio","Diesel":"gasolio","GPL":"gpl","Metano":"metano","Blue Diesel":None,"Diesel+":None,"Gasolio Premium":None,"Gasolio Self Premium":None,"HVOlution":None,"Benzina 100 Ottani":None,"Benzina Self 100 Ottani":None,"Benzina Premium":None}
     for name, expected in tests.items():
         got = fuel_key(name)
         if got != expected:
@@ -215,164 +199,76 @@ def valid_italy(lat, lon):
 
 def within_province_bbox(code: str, lat: float, lon: float) -> bool:
     box = PROVINCE_BOUNDS.get(code)
-    if not box:
-        return True
+    if not box: return True
     min_lat, min_lon, max_lat, max_lon = box
     return min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
 
 
 def is_highway_station(station: dict) -> bool:
-    text = norm_text(" ".join([
-        station.get("type", ""), station.get("name", ""), station.get("address", "")
-    ]))
-    if "autostrad" in text or "area di servizio" in text:
-        return True
-    # Sigle autostradali nell'indirizzo, usate solo come indizio aggiuntivo.
+    text = norm_text(" ".join([station.get("type", ""), station.get("name", ""), station.get("address", "")]))
+    if "autostrad" in text or "area di servizio" in text: return True
     return bool(re.search(r"\b(a\s?\d{1,3}|e\s?\d{1,3})\b", text)) and "km" in text
 
 
 def choose_price(existing, candidate):
-    if existing is None:
-        return candidate
-    # La modalità self è prioritaria, coerentemente con l'uso consumer dell'app.
-    if candidate["self"] and not existing["self"]:
-        return candidate
-    if existing["self"] and not candidate["self"]:
-        return existing
-    # A parità di modalità, preferiamo la comunicazione più recente.
-    e_dt = parse_date(existing.get("updated_raw", ""))
-    c_dt = parse_date(candidate.get("updated_raw", ""))
-    if c_dt and (not e_dt or c_dt >= e_dt):
-        return candidate
+    if existing is None: return candidate
+    if candidate["self"] and not existing["self"]: return candidate
+    if existing["self"] and not candidate["self"]: return existing
+    e_dt = parse_date(existing.get("updated_raw", "")); c_dt = parse_date(candidate.get("updated_raw", ""))
+    if c_dt and (not e_dt or c_dt >= e_dt): return candidate
     return existing
 
 
 def main():
     validate_fuel_classifier()
     stations_text, prices_text, source_info = fetch_mimit_pair()
-
-    stations = {}
-    malformed_coords = 0
+    stations = {}; malformed_coords = 0
     for row in rows_from_text(stations_text):
         sid = row.get("idimpianto", "").strip()
-        if not sid:
-            continue
-        lat = parse_float(row.get("latitudine"))
-        lon = parse_float(row.get("longitudine"))
-        if not valid_italy(lat, lon):
-            malformed_coords += 1
-            continue
+        if not sid: continue
+        lat = parse_float(row.get("latitudine")); lon = parse_float(row.get("longitudine"))
+        if not valid_italy(lat, lon): malformed_coords += 1; continue
         province = (row.get("provincia") or "").upper().strip()
-        station = {
-            "id": sid,
-            "name": row.get("nomeimpianto") or row.get("bandiera") or "Distributore",
-            "brand": row.get("bandiera") or "",
-            "type": row.get("tipoimpianto") or "",
-            "address": row.get("indirizzo") or "",
-            "city": row.get("comune") or "",
-            "province": province,
-            "lat": round(lat, 6),
-            "lon": round(lon, 6),
-            "prices": {},
-        }
-        station["highway"] = is_highway_station(station)
-        stations[sid] = station
+        station = {"id":sid,"name":row.get("nomeimpianto") or row.get("bandiera") or "Distributore","brand":row.get("bandiera") or "","type":row.get("tipoimpianto") or "","address":row.get("indirizzo") or "","city":row.get("comune") or "","province":province,"lat":round(lat,6),"lon":round(lon,6),"prices":{}}
+        station["highway"] = is_highway_station(station); stations[sid] = station
 
-    selected_prices = {}
-    price_rows = 0
+    selected_prices = {}; price_rows = 0
     for row in rows_from_text(prices_text):
         sid = row.get("idimpianto", "").strip()
-        if sid not in stations:
-            continue
+        if sid not in stations: continue
         fuel = fuel_key(row.get("desccarburante") or row.get("carburante") or "")
-        if not fuel:
-            continue
+        if not fuel: continue
         price = parse_float(row.get("prezzo"))
-        if price is None or price <= 0 or price > 10:
-            continue
-        price_rows += 1
-        self_mode = parse_bool(row.get("isself") or row.get("self") or "")
+        if price is None or price <= 0 or price > 10: continue
+        price_rows += 1; self_mode = parse_bool(row.get("isself") or row.get("self") or "")
         updated_raw = row.get("dtcomu") or row.get("datacomunicazione") or row.get("data") or ""
-        candidate = {
-            "price": round(price, 3),
-            "self": self_mode,
-            "updated": iso_date(updated_raw),
-            "updated_raw": updated_raw,
-        }
-        key = (sid, fuel)
-        selected_prices[key] = choose_price(selected_prices.get(key), candidate)
+        candidate = {"price":round(price,3),"self":self_mode,"updated":iso_date(updated_raw),"updated_raw":updated_raw}
+        key = (sid, fuel); selected_prices[key] = choose_price(selected_prices.get(key), candidate)
 
     for (sid, fuel), p in selected_prices.items():
-        p = dict(p)
-        p.pop("updated_raw", None)
-        stations[sid]["prices"][fuel] = p
-
+        p = dict(p); p.pop("updated_raw", None); stations[sid]["prices"][fuel] = p
     national = [s for s in stations.values() if s["prices"]]
-    national.sort(key=lambda s: (s.get("province", ""), s.get("city", ""), s.get("name", ""), s["id"]))
-
-    tuscany = []
-    excluded_mismatch = []
+    national.sort(key=lambda s:(s.get("province",""),s.get("city",""),s.get("name",""),s["id"]))
+    tuscany = []; excluded_mismatch = []
     for s in national:
         code = s.get("province", "")
-        if code not in TUSCANY_PROVINCES:
-            continue
+        if code not in TUSCANY_PROVINCES: continue
         if not within_province_bbox(code, s["lat"], s["lon"]):
-            excluded_mismatch.append({"id": s["id"], "province": code, "lat": s["lat"], "lon": s["lon"]})
-            continue
+            excluded_mismatch.append({"id":s["id"],"province":code,"lat":s["lat"],"lon":s["lon"]}); continue
         tuscany.append(s)
 
     generated_at = datetime.now(timezone.utc).isoformat()
-    common_meta = {
-        "generated_at": generated_at,
-        "source": "MIMIT open data - Prezzi praticati e anagrafica degli impianti",
-        "source_mode": source_info["mode"],
-        "source_snapshot_date": source_info["snapshot_date"],
-        "source_stations": source_info["stations_url"],
-        "source_prices": source_info["prices_url"],
-        "fuels": ["benzina", "gasolio", "gpl", "metano"],
-        "electric": False,
-    }
-
-    national_payload = {
-        "metadata": {
-            **common_meta,
-            "scope": "Italy",
-            "stations": len(national),
-            "malformed_coordinates_excluded": malformed_coords,
-            "price_rows_considered": price_rows,
-        },
-        "stations": national,
-    }
-    tuscany_payload = {
-        "metadata": {
-            **common_meta,
-            "scope": "Tuscany",
-            "stations": len(tuscany),
-            "province_coordinate_mismatches_excluded": len(excluded_mismatch),
-            "excluded_ids": [x["id"] for x in excluded_mismatch],
-        },
-        "stations": tuscany,
-    }
-
-    for path, payload in [
-        (DATA_DIR / "stations-it.json", national_payload),
-        (DATA_DIR / "stations.json", tuscany_payload),
-    ]:
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-        tmp.replace(path)
+    common_meta = {"generated_at":generated_at,"source":"MIMIT open data - Prezzi praticati e anagrafica degli impianti","source_mode":source_info["mode"],"source_snapshot_date":source_info["snapshot_date"],"source_stations":source_info["stations_url"],"source_prices":source_info["prices_url"],"fuels":["benzina","gasolio","gpl","metano"],"electric":False}
+    national_payload = {"metadata":{**common_meta,"scope":"Italy","stations":len(national),"malformed_coordinates_excluded":malformed_coords,"price_rows_considered":price_rows},"stations":national}
+    tuscany_payload = {"metadata":{**common_meta,"scope":"Tuscany","stations":len(tuscany),"province_coordinate_mismatches_excluded":len(excluded_mismatch),"excluded_ids":[x["id"] for x in excluded_mismatch]},"stations":tuscany}
+    for path, payload in [(DATA_DIR/"stations-it.json",national_payload),(DATA_DIR/"stations.json",tuscany_payload)]:
+        tmp = path.with_suffix(path.suffix+".tmp"); tmp.write_text(json.dumps(payload,ensure_ascii=False,separators=(",",":")),encoding="utf-8"); tmp.replace(path)
         print(f"Scritto {path.relative_to(ROOT)} ({path.stat().st_size / 1024 / 1024:.2f} MB)")
-
-    print(f"Impianti Italia: {len(national)}")
-    print(f"Impianti Toscana validi: {len(tuscany)}")
-    print(f"Anomalie provincia↔coordinate escluse: {len(excluded_mismatch)}")
-    if excluded_mismatch:
-        print("Esempi esclusi:", excluded_mismatch[:10])
+    print(f"Impianti Italia: {len(national)}"); print(f"Impianti Toscana validi: {len(tuscany)}"); print(f"Anomalie provincia↔coordinate escluse: {len(excluded_mismatch)}")
+    if excluded_mismatch: print("Esempi esclusi:", excluded_mismatch[:10])
 
 
 if __name__ == "__main__":
-    try:
-        main()
+    try: main()
     except Exception as exc:
-        print(f"ERRORE: {exc}", file=sys.stderr)
-        raise
+        print(f"ERRORE: {exc}", file=sys.stderr); raise
