@@ -40,8 +40,8 @@ body[data-layout="yattaman"]{--theme-bg:#e8f6ff;--theme-top-a:#087bc1;--theme-to
 body[data-layout="lupin"]{--theme-bg:#211718;--theme-top-a:#771515;--theme-top-b:#e0b32b;--theme-ink:#f7f7f7;--theme-accent:#b92121;--theme-soft:#302224;--theme-edge:#651414;--theme-art:url("theme-banners/lupin.webp")}
 body[data-layout="oscar"]{--theme-bg:#fff4df;--theme-top-a:#a77b28;--theme-top-b:#f1d58b;--theme-accent:#9a6c1e;--theme-soft:#fff9ed;--theme-edge:#806124;--theme-art:url("theme-banners/oscar.webp")}
 .layout-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.layout-choice{border:2px solid #d8dee5;border-radius:13px;background:#fff;padding:8px;text-align:left;font-weight:800;min-height:54px;color:#17212b}.layout-choice small{display:block;margin-top:2px;color:#6b7683;font-size:.66rem;font-weight:600}.layout-choice.is-selected{border-color:#0d6efd;box-shadow:0 0 0 2px rgba(13,110,253,.12)}.layout-swatch{display:inline-block;width:22px;height:10px;border-radius:999px;margin-right:6px;vertical-align:1px;background:linear-gradient(90deg,var(--a),var(--b))}
-@media(max-width:700px){body[data-layout] .topbar{min-height:94px;background-position:center,left center}body[data-layout] .controls-card{padding-top:4px!important;padding-bottom:3px!important;gap:3px!important}body[data-layout] .fuel-tab{min-height:30px!important}body[data-layout] .zone-row select{min-height:36px!important}body[data-layout] .smart-fuel-card{min-height:29px!important;margin-bottom:1px!important;padding-top:1px!important;padding-bottom:1px!important}body[data-layout] #map{height:calc(100svh - 245px)!important;min-height:500px!important;max-height:650px!important}}
-@media(max-width:420px){body[data-layout] .topbar{min-height:90px;background-position:center,left center}.layout-picker{grid-template-columns:1fr 1fr}.layout-choice{font-size:.78rem;padding:7px;min-height:50px}}
+@media(max-width:700px){body[data-layout] .topbar{min-height:94px;background-position:var(--theme-pos)}body[data-layout] .controls-card{padding-top:4px!important;padding-bottom:3px!important;gap:3px!important}body[data-layout] .fuel-tab{min-height:30px!important}body[data-layout] .zone-row select{min-height:36px!important}body[data-layout] .smart-fuel-card{min-height:29px!important;margin-bottom:1px!important;padding-top:1px!important;padding-bottom:1px!important}body[data-layout] #map{height:calc(100svh - 245px)!important;min-height:500px!important;max-height:650px!important}}
+@media(max-width:420px){body[data-layout] .topbar{min-height:90px;background-position:var(--theme-pos)}.layout-picker{grid-template-columns:1fr 1fr}.layout-choice{font-size:.78rem;padding:7px;min-height:50px}}
 /* Reserve the left side for character art, with all actions kept interactive. */
 body[data-layout] .topbar .brand-wrap{padding-left:clamp(76px,23vw,135px);min-width:0;flex:1 1 auto}
 body[data-layout] .topbar .brand-wrap .subtle{font-size:clamp(10px,2.3vw,14px);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -55,3 +55,28 @@ body[data-layout] .topbar .brand-wrap>div>div{display:flex!important;flex-direct
 body[data-layout] #dataStatus{font-size:clamp(9px,2.2vw,12px)!important;max-width:calc(100% - 37px);white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis}
 body[data-layout] #refreshPricesBtn{flex:0 0 30px;min-width:30px!important;height:30px!important;padding:0 5px!important}
 @media(max-width:420px){body[data-layout] .topbar .brand-wrap{padding-left:6px!important}}
+
+/* 2026-11-03: responsive single-art header. Never stretch or stack character artwork. */
+body[data-layout] .topbar{
+  background-color:var(--theme-top-a);
+  background-image:var(--theme-art),linear-gradient(115deg,var(--theme-top-a),var(--theme-top-b));
+  background-repeat:no-repeat,no-repeat;
+  background-size:cover,cover;
+  background-position:var(--theme-pos),center;
+  isolation:isolate;
+}
+body[data-layout] .topbar:before{z-index:0}
+body[data-layout] .topbar:after{z-index:0}
+body[data-layout] .topbar>*{z-index:1}
+body[data-layout] .topbar .top-actions{position:relative;z-index:3}
+body[data-layout] .topbar .brand-wrap{position:relative;z-index:3}
+@media(max-width:700px){
+ body[data-layout] .topbar{
+   background-size:cover,cover;
+   background-position:var(--theme-pos),center;
+   min-height:clamp(100px,27vw,132px);
+ }
+}
+@media(max-width:420px){
+ body[data-layout] .topbar{background-position:var(--theme-pos),center;min-height:108px}
+}
