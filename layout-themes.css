@@ -1,13 +1,13 @@
 /* Illustrated selectable layouts. Classico removes data-layout and stays identical to the base app. */
 :root{--theme-bg:#eef2f5;--theme-top-a:#20c6ff;--theme-top-b:#ffe36b;--theme-ink:#17212b;--theme-accent:#0d6efd;--theme-soft:#fff7d2;--theme-edge:#17212b;--theme-art:none;--theme-pos:center top;--theme-size:cover;--theme-glow:none}
-body[data-layout]{background-color:var(--theme-bg);background-image:linear-gradient(165deg,var(--theme-bg) 0%,var(--theme-top-b) 180%);background-repeat:no-repeat;background-attachment:scroll;color:var(--theme-ink);min-height:100svh}
+body[data-layout]{background-color:var(--theme-bg);background-image:linear-gradient(180deg,var(--theme-bg),color-mix(in srgb,var(--theme-bg) 88%,var(--theme-top-a)));background-repeat:no-repeat;background-attachment:scroll;color:var(--theme-ink);min-height:100svh}
 body[data-layout] .controls-card>.legend{display:none!important}
 body[data-layout] .controls-card{padding-bottom:3px!important;margin-bottom:1px!important}
 body[data-layout] .map-card{margin-top:1px!important}
 body[data-layout] .app-shell{position:relative;isolation:isolate;background:transparent}
 body[data-layout] .app-shell:before{content:"";position:absolute;z-index:-2;inset:0;border-radius:22px;background:linear-gradient(180deg,transparent 0%,color-mix(in srgb,var(--theme-bg) 80%,white) 100%);pointer-events:none}
 body[data-layout] .app-shell:after{content:"";position:absolute;z-index:-1;inset:0;border-radius:22px;background:transparent;pointer-events:none}
-body[data-layout] .topbar{position:relative;overflow:hidden;min-height:96px;background-color:var(--theme-top-a);background-image:linear-gradient(90deg,rgba(0,0,0,.12),rgba(0,0,0,.22)),var(--theme-art);background-size:cover,auto 175%;background-position:center,left center;background-repeat:no-repeat;border:2px solid var(--theme-edge);box-shadow:none;padding-top:3px!important;padding-bottom:3px!important}
+body[data-layout] .topbar{position:relative;overflow:hidden;min-height:96px;background-color:var(--theme-top-a);background-image:linear-gradient(90deg,rgba(0,0,0,.12),rgba(0,0,0,.22)),var(--theme-art);background-size:cover,cover;background-position:center,left center;background-repeat:no-repeat;border:2px solid var(--theme-edge);box-shadow:none;padding-top:3px!important;padding-bottom:3px!important}
 body[data-layout] .topbar:before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(0,0,0,.20) 0%,rgba(0,0,0,.04) 42%,transparent 72%);opacity:1}
 body[data-layout] .topbar:after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;pointer-events:none;background:linear-gradient(0deg,rgba(0,0,0,.30),transparent)}
 body[data-layout] .topbar>*{position:relative;z-index:2}
@@ -47,4 +47,4 @@ body[data-layout="oscar"]{--theme-bg:#fff4df;--theme-top-a:#a77b28;--theme-top-b
 body[data-layout] .topbar .brand-wrap{padding-left:clamp(76px,23vw,135px);min-width:0;flex:1 1 auto}
 body[data-layout] .topbar .brand-wrap .subtle{font-size:clamp(10px,2.3vw,14px);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-layout] .topbar .top-actions{flex:0 0 auto}
-@media(max-width:420px){body[data-layout] .topbar .brand-wrap{padding-left:74px}body[data-layout] .topbar{background-size:cover,auto 170%}}
+@media(max-width:420px){body[data-layout] .topbar .brand-wrap{padding-left:74px}body[data-layout] .topbar{background-size:cover,cover}}
