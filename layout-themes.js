@@ -19,22 +19,7 @@
     ['oscar','Lady Oscar','Versailles','#a77b28','#f1d58b']
   ];
   function ensureStatsStyles(){if(document.querySelector('link[data-price-stats-fixed]'))return;const link=document.createElement('link');link.rel='stylesheet';link.href='price-stats-fixed.css?v=20261030-1';link.dataset.priceStatsFixed='1';document.head.appendChild(link)}
-  function ensureArtworkOverrides(){
-    if(document.getElementById('protagonist-art-overrides'))return;
-    const style=document.createElement('style');
-    style.id='protagonist-art-overrides';
-    style.textContent=`
-      body[data-layout="dragon"]{--theme-art:url("https://res.cloudinary.com/jerrick/image/upload/d_642250b563292b35f27461a7.png%2Cf_jpg%2Cfl_progressive%2Cq_auto%2Cw_1024/gdsufjvhsz32kpzbjjlm.png")!important;--theme-pos:left top!important;--theme-size:auto 245px!important}
-      body[data-layout="arale"]{--theme-art:url("https://image.zeta-ai.io/profile-image/509e23b9-e14f-4ae5-88e6-faf11e202387/bec59632-7c81-4179-bd02-5827dbef5b9f.jpeg")!important;--theme-pos:left top!important;--theme-size:auto 245px!important}
-      body[data-layout="daitarn"]{--theme-art:url("https://bibliomecha.altervista.org/pilots/images/Daitarn%203/banjo-haran-portrait-3.jpg")!important;--theme-pos:left top!important;--theme-size:auto 245px!important}
-      body[data-layout="devilman"]{--theme-art:url("https://image.news.livedoor.com/newsimage/stf/7/0/70ea9_1839_db5b84aa3ef6361eb51fad672eab10bd.jpg")!important;--theme-pos:left top!important;--theme-size:auto 245px!important}
-      body[data-layout="lamu"]{--theme-art:url("https://i.pinimg.com/736x/fd/ac/67/fdac673c3e95fd4193510d4a004d79df.jpg")!important;--theme-pos:left top!important;--theme-size:auto 245px!important}
-      body[data-layout="kenshiro"]{--theme-art:url("https://images.everyeye.it/img-notizie/guida-all-anime-ken-guerriero-serie-cosa-parlano-v3-864715-1200x1200.webp")!important;--theme-pos:left top!important;--theme-size:auto 245px!important}
-      body[data-layout="lupin"]{--theme-art:url("https://kk-promote-template.v3mh.com/answer-admin/prod/image/230301/PtsNF0pK7.png")!important;--theme-pos:left top!important;--theme-size:auto 245px!important}
-      @media(max-width:420px){body[data-layout="dragon"],body[data-layout="arale"],body[data-layout="daitarn"],body[data-layout="devilman"],body[data-layout="lamu"],body[data-layout="kenshiro"],body[data-layout="lupin"]{--theme-size:auto 235px!important}}
-    `;
-    document.head.appendChild(style);
-  }
+  function ensureArtworkOverrides(){/* Theme art framing is defined exclusively in layout-themes.css. */}
   function valid(v){return layouts.some(x=>x[0]===v)?v:'current'}
   function apply(v){v=valid(v);if(v==='current')document.body.removeAttribute('data-layout');else document.body.dataset.layout=v;document.querySelectorAll('.layout-choice').forEach(b=>b.classList.toggle('is-selected',b.dataset.layout===v));setTimeout(()=>{window.dispatchEvent(new Event('resize'));if(window.__carburantiMap)window.__carburantiMap.invalidateSize();},80)}
   function saved(){try{return valid(localStorage.getItem(KEY)||localStorage.getItem('carburanti:layout:v1')||'current')}catch{return 'current'}}
