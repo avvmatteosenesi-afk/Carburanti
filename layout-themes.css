@@ -80,3 +80,21 @@ body[data-layout] .topbar .brand-wrap{position:relative;z-index:3}
 @media(max-width:420px){
  body[data-layout] .topbar{background-position:var(--theme-pos),center;min-height:108px}
 }
+
+/* Header artwork framing: show entire illustration on narrow phones instead of cropping it. */
+body[data-layout] .topbar{
+  background-size:contain,cover!important;
+  background-position:center center,center center!important;
+}
+@media(max-width:700px){
+  body[data-layout] .topbar{
+    background-size:contain,cover!important;
+    background-position:center center,center center!important;
+  }
+}
+@media(max-width:420px){
+  body[data-layout] .topbar{
+    background-size:contain,cover!important;
+    background-position:center center,center center!important;
+  }
+}
