@@ -24,15 +24,23 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
-      - name: Download MIMIT open-data base
-        run: python scripts/update_data.py
+      - name: Refresh MIMIT registry base with repository fallback
+        shell: bash
+        run: |
+          if python scripts/update_data.py; then
+            echo "Anagrafica MIMIT aggiornata correttamente."
+          else
+            echo "::warning::Anagrafica MIMIT e archivio esterno non disponibili: mantengo l'ultimo dataset validato presente nel repository."
+            test -s data/stations.json
+            test -s data/stations-it.json
+          fi
 
       - name: Refresh current prices from official Osservaprezzi API
         shell: bash
@@ -40,7 +48,7 @@ jobs:
           if python scripts/refresh_prices_secondary.py; then
             echo "Osservaprezzi live API aggiornata correttamente."
           else
-            echo "::warning::API live MIMIT non disponibile o incompleta: mantengo il fallback ufficiale già generato da update_data.py."
+            echo "::warning::API live MIMIT non disponibile o incompleta: mantengo il dataset validato disponibile."
           fi
 
       - name: Validate data and release integrity
@@ -58,7 +66,7 @@ jobs:
           test -s carburanti-green-512.png
 
       - name: Set up Node for mobile E2E
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
 
@@ -99,7 +107,7 @@ jobs:
           enablement: true
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: '_site'
 
