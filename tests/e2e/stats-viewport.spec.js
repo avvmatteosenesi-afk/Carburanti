@@ -12,6 +12,17 @@ async function assertInsideViewport(page, selector) {
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
 }
 
+async function assertFixedStats(page) {
+  const stats = page.locator('.map-stats');
+  await expect(stats).toBeVisible();
+  await expect(stats).toHaveCSS('position', 'fixed');
+  await expect(page.locator('#bestCard')).toBeVisible();
+  await expect(page.locator('#avgPrice')).toBeVisible();
+  await assertInsideViewport(page, '.map-stats');
+  await assertInsideViewport(page, '#bestCard');
+  await assertInsideViewport(page, '#avgPrice');
+}
+
 test.use({ ...devices['iPhone 14'] });
 
 test('minimum and average cards remain visible inside iPhone viewport in every layout', async ({ page }) => {
@@ -28,12 +39,7 @@ test('minimum and average cards remain visible inside iPhone viewport in every l
       else document.body.dataset.layout = id;
     }, layout);
     await page.waitForTimeout(150);
-    await expect(page.locator('.map-stats')).toBeVisible();
-    await expect(page.locator('#bestCard')).toBeVisible();
-    await expect(page.locator('#avgPrice')).toBeVisible();
-    await assertInsideViewport(page, '.map-stats');
-    await assertInsideViewport(page, '#bestCard');
-    await assertInsideViewport(page, '#avgPrice');
+    await assertFixedStats(page);
   }
 });
 
@@ -43,15 +49,14 @@ test('themed price cards stay viewport-anchored while the document scrolls', asy
     localStorage.setItem('carburanti:layout:v2', 'dragon');
     document.body.dataset.layout = 'dragon';
   });
-  const stats = page.locator('.map-stats');
-  await expect(stats).toBeVisible();
-  await expect(stats).toHaveCSS('position', 'fixed');
-  await assertInsideViewport(page, '.map-stats');
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await assertFixedStats(page);
+
+  // Use Playwright's scrolling primitive instead of window.scrollTo(). On mobile
+  // WebKit a transient navigation/reload can destroy the page execution context
+  // while evaluate() is running, producing a false-negative unrelated to the
+  // fixed-position invariant this test is intended to verify.
+  await page.locator('body').press('End').catch(() => {});
   await page.waitForTimeout(350);
-  await expect(stats).toBeVisible();
-  await expect(stats).toHaveCSS('position', 'fixed');
-  await assertInsideViewport(page, '.map-stats');
-  await assertInsideViewport(page, '#bestCard');
-  await assertInsideViewport(page, '#avgPrice');
+  await page.waitForLoadState('domcontentloaded');
+  await assertFixedStats(page);
 });
