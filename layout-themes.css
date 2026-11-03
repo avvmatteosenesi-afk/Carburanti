@@ -47,3 +47,11 @@ body[data-layout] .topbar .brand-wrap{padding-left:clamp(76px,23vw,135px);min-wi
 body[data-layout] .topbar .brand-wrap .subtle{font-size:clamp(10px,2.3vw,14px);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-layout] .topbar .top-actions{flex:0 0 auto}
 @media(max-width:420px){body[data-layout] .topbar .brand-wrap{padding-left:74px}body[data-layout] .topbar{background-size:cover}}
+
+/* Compact status and refresh on the left of illustrated headers. */
+body[data-layout] .topbar .brand-wrap{padding-left:8px!important;align-self:flex-end;flex:1 1 0;min-width:0}
+body[data-layout] .topbar .brand-wrap>div{min-width:0;width:100%}
+body[data-layout] .topbar .brand-wrap>div>div{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;gap:5px!important;max-width:100%}
+body[data-layout] #dataStatus{font-size:clamp(9px,2.2vw,12px)!important;max-width:calc(100% - 37px);white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis}
+body[data-layout] #refreshPricesBtn{flex:0 0 30px;min-width:30px!important;height:30px!important;padding:0 5px!important}
+@media(max-width:420px){body[data-layout] .topbar .brand-wrap{padding-left:6px!important}}
