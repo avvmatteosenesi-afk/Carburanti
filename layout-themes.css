@@ -103,3 +103,14 @@ body[data-layout] .topbar{
 body[data-layout] .topbar{background-size:cover,cover!important;background-position:left center,center!important}
 @media(max-width:700px){body[data-layout] .topbar{background-size:cover,cover!important;background-position:left center,center!important}}
 @media(max-width:420px){body[data-layout] .topbar{background-size:cover,cover!important;background-position:left center,center!important}}
+
+/* 2026-11-04: entire illustration visible, protagonist anchored at left.
+   The second copy fills the panoramic strip behind the uncropped original. */
+body[data-layout] .topbar{
+  background-image:var(--theme-art),var(--theme-art),linear-gradient(115deg,var(--theme-top-a),var(--theme-top-b))!important;
+  background-size:contain,cover,cover!important;
+  background-position:left center,center center,center center!important;
+  background-repeat:no-repeat,no-repeat,no-repeat!important;
+}
+@media(max-width:700px){body[data-layout] .topbar{background-size:contain,cover,cover!important;background-position:left center,center center,center center!important}}
+@media(max-width:420px){body[data-layout] .topbar{background-size:contain,cover,cover!important;background-position:left center,center center,center center!important}}
