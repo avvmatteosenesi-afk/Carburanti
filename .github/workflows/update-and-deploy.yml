@@ -31,6 +31,27 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Diagnose MIMIT endpoints
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request, urllib.error
+          endpoints = {
+              "MIMIT anagrafica": "https://www.mimit.gov.it/images/exportCSV/anagrafica_impianti_attivi.csv",
+              "MIMIT prezzi": "https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv",
+              "Archivio fallback": "https://raw.githubusercontent.com/LucaDDDD/benzina-data/main/data/last_update.json",
+              "Osservaprezzi API": "https://carburanti.mise.gov.it/ospzApi/registry/region",
+          }
+          for label, url in endpoints.items():
+              try:
+                  req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Cache-Control": "no-cache"}, method="GET")
+                  with urllib.request.urlopen(req, timeout=12) as response:
+                      sample = response.read(160)
+                      print(f"{label}: HTTP {response.status}, final_url={response.url}, type={response.headers.get('Content-Type')}, sample={sample[:100]!r}", flush=True)
+              except Exception as exc:
+                  print(f"::warning::{label}: {type(exc).__name__}: {exc}", flush=True)
+          PY
+
       - name: Refresh MIMIT registry base with repository fallback
         shell: bash
         run: |
