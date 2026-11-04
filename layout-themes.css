@@ -98,3 +98,8 @@ body[data-layout] .topbar{
     background-position:center center,center center!important;
   }
 }
+
+/* Full-bleed panoramic WebP contains the proportionate left-aligned subject. */
+body[data-layout] .topbar{background-size:cover,cover!important;background-position:left center,center!important}
+@media(max-width:700px){body[data-layout] .topbar{background-size:cover,cover!important;background-position:left center,center!important}}
+@media(max-width:420px){body[data-layout] .topbar{background-size:cover,cover!important;background-position:left center,center!important}}
