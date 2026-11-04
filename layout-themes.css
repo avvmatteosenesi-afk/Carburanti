@@ -128,3 +128,13 @@ body[data-layout] .topbar{
 }
 @media(max-width:700px){body[data-layout] .topbar{min-height:76px!important;height:76px!important;background-size:cover,cover!important;background-position:left center,center center!important}}
 @media(max-width:420px){body[data-layout] .topbar{min-height:72px!important;height:72px!important;background-size:cover,cover!important;background-position:left center,center center!important}}
+
+/* 2026-11-04: extend existing artwork across the complete illustrated header.
+   Keep each theme's existing WebP; no new artwork or other layout changes. */
+body[data-layout] .topbar{
+  background-size:100% 100%,cover!important;
+  background-position:left center,center!important;
+  background-repeat:no-repeat,no-repeat!important;
+}
+@media(max-width:700px){body[data-layout] .topbar{background-size:100% 100%,cover!important}}
+@media(max-width:420px){body[data-layout] .topbar{background-size:100% 100%,cover!important}}
