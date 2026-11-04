@@ -24,5 +24,6 @@ jobs:
           git add theme-banners/*.webp
           if ! git diff --cached --quiet; then
             git commit -m "Build self-contained panoramic theme banners"
-            git push
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
