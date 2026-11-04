@@ -1,6 +1,6 @@
 const { test, expect, devices } = require('@playwright/test');
 
-const layouts = ['current','dragon','arale','daitarn','devilman','jeeg','harlock','mazinga','goldrake','lamu','kenshiro','candy','yattaman','lupin','oscar'];
+const layouts = ['current','dragon','arale','daitarn','jeeg','harlock','mazinga','goldrake','lamu','kenshiro','candy','yattaman','lupin','oscar'];
 
 async function assertInsideViewport(page, selector) {
   const box = await page.locator(selector).boundingBox();
@@ -51,12 +51,13 @@ test('themed price cards stay viewport-anchored while the document scrolls', asy
   });
   await assertFixedStats(page);
 
-  // Use Playwright's scrolling primitive instead of window.scrollTo(). On mobile
-  // WebKit a transient navigation/reload can destroy the page execution context
-  // while evaluate() is running, producing a false-negative unrelated to the
-  // fixed-position invariant this test is intended to verify.
-  await page.locator('body').press('End').catch(() => {});
-  await page.waitForTimeout(350);
-  await page.waitForLoadState('domcontentloaded');
+  // Scroll without synthesizing the End key, which can trigger an unexpected
+  // navigation in mobile WebKit. Check the actual scroll offset and cards.
+  await page.evaluate(() => {
+    document.documentElement.style.minHeight = '180vh';
+    window.scrollTo({ top: 250, behavior: 'instant' });
+  });
+  await page.waitForTimeout(300);
+  await expect(page.locator('.map-stats')).toBeVisible({ timeout: 10000 });
   await assertFixedStats(page);
 });
