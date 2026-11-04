@@ -99,8 +99,19 @@ jobs:
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium webkit
 
-      - name: Run mobile viewport E2E tests
-        run: npm run test:e2e
+      - name: Run mobile viewport E2E tests against candidate build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m http.server 4173 --bind 127.0.0.1 > /tmp/carburanti-e2e-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4173/index.html; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --output /dev/null http://127.0.0.1:4173/index.html
+          PLAYWRIGHT_TEST_BASE_URL=http://127.0.0.1:4173/ npm run test:e2e
 
       - name: Build clean Pages artifact
         shell: bash
