@@ -21,42 +21,30 @@ def make(name,a,b):
  if not path.exists():raise FileNotFoundError(path)
  original=Image.open(path).convert("RGB")
  w,h=1200,260
- # The entire image is visible in a protected illustration window.
- # Remaining space is filled by theme-specific comic-book decoration.
- base=Image.new("RGB",(w,h))
- pixels=base.load()
- ca,cb=rgb(a),rgb(b)
- for y in range(h):
-  for x in range(w):
-   t=min(1,max(0,x/w*.86+y/h*.14))
-   pixels[x,y]=blend(ca,cb,t)
- draw=ImageDraw.Draw(base,"RGBA")
- cx,cy=700,132
- for n in range(24):
-  theta=2*math.pi*n/24
-  theta2=theta+2*math.pi/48
-  draw.polygon([(cx,cy),(cx+1100*math.cos(theta),cy+1100*math.sin(theta)),(cx+1100*math.cos(theta2),cy+1100*math.sin(theta2))],fill=(255,255,255,16))
- for x,y,r in [(1030,48,65),(840,210,44),(1140,230,95)]:
-  draw.ellipse((x-r,y-r,x+r,y+r),outline=(255,255,255,62),width=5)
- # Keep the complete source image; never use a cover crop or aspect-ratio distortion.
- panel=(28,12,730,248)
- inner=(panel[2]-panel[0],panel[3]-panel[1])
- thumb=ImageOps.contain(original,inner,Image.Resampling.LANCZOS)
- px=panel[0]+(inner[0]-thumb.width)//2
- py=panel[1]+(inner[1]-thumb.height)//2
- # Soft ambient shadow around the source artwork.
- shadow=Image.new("RGBA",(w,h))
- sd=ImageDraw.Draw(shadow)
- sd.rounded_rectangle((px-6,py-6,px+thumb.width+6,py+thumb.height+6),radius=15,fill=(0,0,0,80))
- shadow=shadow.filter(ImageFilter.GaussianBlur(11))
- base=Image.alpha_composite(base.convert("RGBA"),shadow)
- base.alpha_composite(thumb.convert("RGBA"),(px,py))
- # Subtle dark lower band supports legible live status and action controls.
+ # Fill every pixel with artwork, never stretch or crop the foreground characters.
+ background=ImageOps.fit(original,(w,h),Image.Resampling.LANCZOS,centering=(.36,.5))
+ background=background.filter(ImageFilter.GaussianBlur(24))
+ background=ImageEnhance.Color(background).enhance(1.18)
+ # Hero art: keep its aspect ratio and place its subject on the left.
+ foreground=ImageOps.contain(original,(820,260),Image.Resampling.LANCZOS)
+ canvas=background.convert("RGBA")
+ fg=foreground.convert("RGBA")
+ px=0
+ py=(h-foreground.height)//2
+ # Softly blend the right edge into the full-bleed artwork behind it.
+ alpha=Image.new("L",fg.size,255)
+ ap=alpha.load()
+ fade=min(110,fg.width//4)
+ for x in range(fg.width-fade,fg.width):
+  opacity=round(255*(fg.width-x-1)/max(1,fade))
+  for y in range(fg.height):ap[x,y]=opacity
+ fg.putalpha(alpha)
+ canvas.alpha_composite(fg,(px,py))
  veil=Image.new("RGBA",(w,h),(0,0,0,0))
  vd=ImageDraw.Draw(veil)
  for y in range(195,260):
-  vd.line((0,y,w,y),fill=(0,0,0,round(92*(y-195)/65)))
- base=Image.alpha_composite(base,veil).convert("RGB")
- base.save(path,"WEBP",quality=88,method=6)
- print(name,original.size,"=>",base.size)
+  vd.line((0,y,w,y),fill=(0,0,0,round(80*(y-195)/65)))
+ canvas=Image.alpha_composite(canvas,veil).convert("RGB")
+ canvas.save(path,"WEBP",quality=88,method=6)
+ print(name,original.size,"=>",canvas.size)
 for name,(a,b) in THEMES.items():make(name,a,b)
