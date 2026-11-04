@@ -80,6 +80,9 @@ jobs:
           python -m pip install --quiet pillow
           python scripts/generate_icons.py
 
+      - name: Expand existing cartoon art across theme banners
+        run: python scripts/expand_theme_banners.py
+
       - name: Verify generated icons
         run: |
           test -s carburanti-green-180.png
