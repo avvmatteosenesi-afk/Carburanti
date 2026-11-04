@@ -77,20 +77,18 @@ def validate_dataset(rel, min_stations, min_prices):
         print(f'{rel}: {n} impianti, {price_count} prezzi, snapshot {snap}, età {age} giorni, fonte {mode}')
         if age < -1:
             raise SystemExit(f'{rel}: snapshot futuro non plausibile ({snap})')
-        if age > 30:
-            raise SystemExit(f'{rel}: fallback eccessivamente vecchio ({age} giorni)')
+        if age > 2:
+            raise SystemExit(f'{rel}: dati MIMIT obsoleti ({age} giorni): pubblicazione bloccata per evitare prezzi non aggiornati')
         if ('live' in mode.lower() or 'api' in mode.lower()) and age > 2:
             raise SystemExit(f'{rel}: fonte dichiarata live ma snapshot vecchio di {age} giorni')
-        if age > 2:
-            print(f'WARNING: {rel}: fallback MIMIT non recente ({age} giorni), pubblicazione consentita per continuità di servizio')
     else:
         print(f'{rel}: {n} impianti, {price_count} prezzi, fonte live/senza snapshot')
 
     if latest_price:
         latest_age = (datetime.now(timezone.utc) - latest_price.astimezone(timezone.utc)).total_seconds() / 86400
         print(f'{rel}: prezzo più recente aggiornato {latest_age:.1f} giorni fa')
-        if latest_age > 30:
-            raise SystemExit(f'{rel}: nessun prezzo aggiornato negli ultimi 30 giorni')
+        if latest_age > 2:
+            raise SystemExit(f'{rel}: nessun prezzo aggiornato negli ultimi 48 ore ({latest_age:.1f} giorni)')
 
 validate_dataset('data/stations-it.json', 15000, 25000)
 validate_dataset('data/stations.json', 900, 1500)
