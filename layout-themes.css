@@ -138,3 +138,7 @@ body[data-layout] .topbar{
 }
 @media(max-width:700px){body[data-layout] .topbar{background-size:100% 100%,cover!important}}
 @media(max-width:420px){body[data-layout] .topbar{background-size:100% 100%,cover!important}}
+
+/* Position the illustrated strip lower, keeping controls and map untouched. */
+body[data-layout] .topbar{background-position:left 14px,center center!important}
+@media(max-width:700px){body[data-layout] .topbar{background-position:left 12px,center center!important}}
