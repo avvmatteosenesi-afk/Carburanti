@@ -31,15 +31,23 @@
     const btn = document.createElement('button');
     btn.id = 'refreshPricesBtn';
     btn.type = 'button';
-    btn.setAttribute('aria-label', 'Aggiorna prezzi');
-    btn.title = 'Aggiorna prezzi';
+    btn.setAttribute('aria-label', 'Ricarica i dati prezzi pubblicati');
+    btn.title = 'Ricarica il dataset pubblicato. I prezzi vengono aggiornati automaticamente dal servizio MIMIT; questo pulsante non avvia una nuova interrogazione.';
     btn.textContent = '↻';
     btn.style.cssText = 'border:1px solid #d9e0e6;background:#fff;border-radius:9px;min-width:30px;height:30px;padding:0 7px;font-size:19px;line-height:1;cursor:pointer;color:#17212b';
     row.appendChild(btn);
+    const help = document.createElement('span');
+    help.id = 'refreshHelp';
+    help.textContent = 'Ricarica dati pubblicati · aggiornamento prezzi automatico';
+    help.style.cssText = 'flex-basis:100%;font-size:10px;line-height:1.15;opacity:.86';
+    btn.setAttribute('aria-describedby', help.id);
+    row.appendChild(help);
 
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       btn.textContent = '…';
+      btn.title = 'Ricarico i dati prezzi già pubblicati…';
+      help.textContent = 'Ricarico i dati prezzi già pubblicati…';
       try { sessionStorage.setItem(KEY, String(Date.now())); } catch (_) {}
       await reloadFresh('refresh');
     });
