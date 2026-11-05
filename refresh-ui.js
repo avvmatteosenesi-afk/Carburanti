@@ -37,6 +37,14 @@
       try { sessionStorage.setItem(KEY, String(Date.now())); } catch (_) {}
       await reloadFresh('refresh');
     });
+
+    let lastAutoReload = Date.now();
+    setInterval(() => {
+      if (document.hidden) return;
+      if (Date.now() - lastAutoReload < 60 * 60 * 1000) return;
+      lastAutoReload = Date.now();
+      reloadFresh('autoRefresh');
+    }, 60 * 1000);
     return true;
   }
 
