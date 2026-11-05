@@ -131,19 +131,23 @@ def main():
  region_by_province={p:r for r,ps in REGION_PROVINCES.items() for p in ps}
  provinces=[(region_by_province[p],p) for p in province_codes if p in region_by_province]
  if len(provinces)<90:raise RuntimeError(f'Elenco province incompleto ({len(provinces)})')
- fetched_provinces=api_stations=price_rows=new_stations=stale_price_rows=0; fetched_at=datetime.now(timezone.utc).isoformat()
- # Rimuovi in memoria i prezzi ereditati: un impianto/carburante assente dalla
- # risposta live non deve essere pubblicato come se fosse stato appena aggiornato.
- for station in by_id.values(): station['prices']={}
+ fetched_provinces=api_stations=price_rows=new_stations=stale_price_rows=0; fetched_at=datetime.now(timezone.utc).isoformat(); fallback_provinces=[]
  for region,province in provinces:
   try:
    # fuelType intenzionalmente omesso: l'API restituisce tutti i carburanti.
    payload=request_json('search/area',{'region':region,'province':province,'town':None,'priceOrder':'asc'})
    rows=unwrap_rows(payload)
   except Exception as exc:
-   raise RuntimeError(f'{province}: aggiornamento API incompleto: {exc}') from exc
+   fallback_provinces.append(province)
+   print(f'{province}: API non disponibile; mantengo la base MIMIT ({exc})',flush=True)
+   continue
   if not rows:
-   raise RuntimeError(f'{province}: API ha restituito un elenco vuoto')
+   fallback_provinces.append(province)
+   print(f'{province}: risposta API vuota; mantengo la base MIMIT',flush=True)
+   continue
+  # Rimpiazza i dati di base solo per le province che hanno risposto con dati live.
+  for old_station in by_id.values():
+   if str(old_station.get('province','')).upper()==province: old_station['prices']={}
   fetched_provinces+=1; api_stations+=len(rows)
   print(f'{province}: {len(rows)} impianti',flush=True)
   for item in rows:
@@ -174,13 +178,15 @@ def main():
     selected[fuel]=choose(selected.get(fuel),{'price':round(price,3),'self':selfv,'updated':parsed_updated.isoformat()}); price_rows+=1
    if selected:station['prices'].update(selected)
  expected_provinces=len(provinces)
- if fetched_provinces != expected_provinces or api_stations<12000 or price_rows<15000:
-  raise RuntimeError(f'API Osservaprezzi incompleta: province={fetched_provinces}/{expected_provinces}, impianti={api_stations}, prezzi={price_rows}')
+ if fetched_provinces<90 or api_stations<12000 or price_rows<15000:
+  raise RuntimeError(f'API Osservaprezzi incompleta: province live={fetched_provinces}/{expected_provinces}, impianti={api_stations}, prezzi={price_rows}')
+ if len(fallback_provinces)>17:
+  raise RuntimeError(f'API Osservaprezzi troppo incompleta: province senza risposta {fallback_provinces}')
  # Verifica che ogni provincia e ogni prezzo scritto siano realmente presenti e datati.
  missing_tuscany=sorted(TUSCANY-{str(s.get('province','')).upper() for s in by_id.values() if s.get('prices')})
  if missing_tuscany:raise RuntimeError(f'API Osservaprezzi senza prezzi aggiornati in province toscane: {missing_tuscany}')
  stations=[s for s in by_id.values() if s.get('prices')]; stations.sort(key=lambda s:(s.get('province',''),s.get('city',''),s.get('name',''),str(s['id'])))
- meta={'generated_at':fetched_at,'source':'MIMIT Osservaprezzi - API pubblica v2','source_mode':'mimit-osservaprezzi-live-api-v2','source_snapshot_date':datetime.now(timezone.utc).date().isoformat(),'source_prices':f'{BASE}/search/area','stations':len(stations),'api_provinces':fetched_provinces,'api_station_results':api_stations,'api_price_rows':price_rows}
+ meta={'generated_at':fetched_at,'source':'MIMIT Osservaprezzi - API pubblica v2','source_mode':'mimit-osservaprezzi-live-api-v2','source_snapshot_date':datetime.now(timezone.utc).date().isoformat(),'source_prices':f'{BASE}/search/area','stations':len(stations),'api_provinces':fetched_provinces,'api_fallback_provinces':fallback_provinces,'api_station_results':api_stations,'api_price_rows':price_rows}
  national['stations']=stations; national['metadata'].update(meta)
  tus=[s for s in stations if s.get('province') in TUSCANY and within_bbox(s.get('province'),s['lat'],s['lon'])]
  old_tus=json.loads(tuscany_path.read_text(encoding='utf-8')); old_tus['stations']=tus; old_tus['metadata'].update(meta|{'stations':len(tus)})
