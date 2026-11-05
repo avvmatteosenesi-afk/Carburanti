@@ -7,6 +7,7 @@ const SHELL = [
   './app.js?v=20261026-2', './trip.js?v=20261020-3',
   './zone-zoom.js?v=20261020-1', './home-ui.js?v=20261020-4',
   './refresh-ui.js?v=20261105-refresh-slot-1', './ux-enhancements.js?v=20261105-quick-head-1',
+  './ux-enhancements.css?v=20261105-quick-head-2',
   './manifest.webmanifest?v=20261020-3', './icon.svg?v=20261020-3',
   './favicon.svg?v=20261020-3', './icon-192.png?v=20261020-3',
   './icon-512.png?v=20261020-3', './apple-touch-icon.png?v=20261020-3'
