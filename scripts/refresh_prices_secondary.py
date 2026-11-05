@@ -8,7 +8,7 @@ pubblicato.
 """
 from __future__ import annotations
 import json, time, urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]; DATA=ROOT/'data'
@@ -169,7 +169,7 @@ def main():
     selfv=str(p.get('isSelf') if 'isSelf' in p else p.get('self',0)).lower() in ('1','true')
     updated=p.get('dtComu') or p.get('updated') or p.get('date') or item.get('insertDate')
     parsed_updated=parse_timestamp(updated)
-    if parsed_updated is None or (datetime.now(timezone.utc)-parsed_updated).total_seconds()>48*3600 or parsed_updated>datetime.now(timezone.utc)+__import__('datetime').timedelta(hours=24):
+    if parsed_updated is None or (datetime.now(timezone.utc)-parsed_updated).total_seconds()>48*3600 or parsed_updated>datetime.now(timezone.utc)+timedelta(hours=24):
      stale_price_rows+=1; continue
     selected[fuel]=choose(selected.get(fuel),{'price':round(price,3),'self':selfv,'updated':parsed_updated.isoformat()}); price_rows+=1
    if selected:station['prices'].update(selected)
