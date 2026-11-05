@@ -51,6 +51,17 @@ def request_json(path,payload=None,timeout=30,attempts=3):
 def parse_float(v):
  try:return float(str(v).replace(',','.'))
  except (TypeError,ValueError):return None
+def parse_timestamp(value):
+ if not value:return None
+ raw=str(value).strip()
+ try:dt=datetime.fromisoformat(raw.replace('Z','+00:00'))
+ except ValueError:
+  dt=None
+  for fmt in ('%d/%m/%Y %H:%M:%S','%d/%m/%Y %H:%M','%d/%m/%Y','%Y-%m-%d %H:%M:%S','%Y-%m-%d %H:%M'):
+   try:dt=datetime.strptime(raw,fmt); break
+   except ValueError:continue
+ if dt is None:return None
+ return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 def valid_italy(lat,lon):return lat is not None and lon is not None and 35<=lat<=48.5 and 5.5<=lon<=19.5
 def within_bbox(code,lat,lon):
  b=PROVINCE_BOUNDS.get(code); return not b or (b[0]<=lat<=b[2] and b[1]<=lon<=b[3])
@@ -120,7 +131,7 @@ def main():
  region_by_province={p:r for r,ps in REGION_PROVINCES.items() for p in ps}
  provinces=[(region_by_province[p],p) for p in province_codes if p in region_by_province]
  if len(provinces)<90:raise RuntimeError(f'Elenco province incompleto ({len(provinces)})')
- fetched_provinces=api_stations=price_rows=new_stations=0; fetched_at=datetime.now(timezone.utc).isoformat()
+ fetched_provinces=api_stations=price_rows=new_stations=stale_price_rows=0; fetched_at=datetime.now(timezone.utc).isoformat()
  # Rimuovi in memoria i prezzi ereditati: un impianto/carburante assente dalla
  # risposta live non deve essere pubblicato come se fosse stato appena aggiornato.
  for station in by_id.values(): station['prices']={}
@@ -157,7 +168,10 @@ def main():
     if price is None or not 0<price<10:continue
     selfv=str(p.get('isSelf') if 'isSelf' in p else p.get('self',0)).lower() in ('1','true')
     updated=p.get('dtComu') or p.get('updated') or p.get('date') or item.get('insertDate')
-    selected[fuel]=choose(selected.get(fuel),{'price':round(price,3),'self':selfv,'updated':updated}); price_rows+=1
+    parsed_updated=parse_timestamp(updated)
+    if parsed_updated is None or (datetime.now(timezone.utc)-parsed_updated).total_seconds()>48*3600 or parsed_updated>datetime.now(timezone.utc)+__import__('datetime').timedelta(hours=24):
+     stale_price_rows+=1; continue
+    selected[fuel]=choose(selected.get(fuel),{'price':round(price,3),'self':selfv,'updated':parsed_updated.isoformat()}); price_rows+=1
    if selected:station['prices'].update(selected)
  expected_provinces=len(provinces)
  if fetched_provinces != expected_provinces or api_stations<12000 or price_rows<15000:
@@ -171,5 +185,5 @@ def main():
  tus=[s for s in stations if s.get('province') in TUSCANY and within_bbox(s.get('province'),s['lat'],s['lon'])]
  old_tus=json.loads(tuscany_path.read_text(encoding='utf-8')); old_tus['stations']=tus; old_tus['metadata'].update(meta|{'stations':len(tus)})
  national_path.write_text(json.dumps(national,ensure_ascii=False,separators=(',',':')),encoding='utf-8'); tuscany_path.write_text(json.dumps(old_tus,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
- print(f'Osservaprezzi API v2 OK: {fetched_provinces} province, {api_stations} impianti, {price_rows} prezzi, {new_stations} nuovi.',flush=True)
+ print(f'Osservaprezzi API v2 OK: {fetched_provinces} province, {api_stations} impianti, {price_rows} prezzi recenti, {stale_price_rows} righe prezzo scartate per data assente/obsoleta, {new_stations} nuovi.',flush=True)
 if __name__=='__main__':main()
