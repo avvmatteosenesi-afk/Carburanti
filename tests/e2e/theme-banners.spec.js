@@ -43,7 +43,7 @@ test('all theme banners load panoramically and header controls stay usable', asy
 
   await settings.click();
   await expect(page.locator('#settingsPanel')).toBeVisible();
-  await page.locator('#settingsCloseBtn').click();
+  await page.locator('#settingsPanel').click({ position: { x: 2, y: 2 } });
   await expect(page.locator('#settingsPanel')).toBeHidden();
   await trip.click();
   await expect(page.locator('#tripPanel')).toBeVisible();
