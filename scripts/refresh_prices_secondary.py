@@ -132,7 +132,7 @@ def main():
   except Exception as exc:
    raise RuntimeError(f'{province}: aggiornamento API incompleto: {exc}') from exc
   if not rows:
-   print(f'{province}: nessun risultato',flush=True); continue
+   raise RuntimeError(f'{province}: API ha restituito un elenco vuoto')
   fetched_provinces+=1; api_stations+=len(rows)
   print(f'{province}: {len(rows)} impianti',flush=True)
   for item in rows:
