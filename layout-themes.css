@@ -143,5 +143,13 @@ body[data-layout] .topbar{
 body[data-layout] .topbar{background-position:left 14px,center center!important}
 @media(max-width:700px){body[data-layout] .topbar{background-position:left 12px,center center!important}}
 
-/* Preserve complete panoramic art at mobile header height without cropping character faces. */
-body[data-layout] .topbar{background-size:auto 100%;background-position:left center;background-repeat:no-repeat}
+
+/* Keep full-size character art on the left and continue the same scene behind it across wide headers. */
+body[data-layout] .topbar{
+  background-image:var(--theme-art),var(--theme-art),linear-gradient(115deg,var(--theme-top-a),var(--theme-top-b))!important;
+  background-size:contain,cover,cover!important;
+  background-position:left center,center center,center center!important;
+  background-repeat:no-repeat,no-repeat,no-repeat!important;
+}
+@media(max-width:700px){body[data-layout] .topbar{background-size:contain,cover,cover!important;background-position:left center,center center,center center!important}}
+@media(max-width:420px){body[data-layout] .topbar{background-size:contain,cover,cover!important;background-position:left center,center center,center center!important}}
