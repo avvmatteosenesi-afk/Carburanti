@@ -22,10 +22,21 @@ PROVINCE_ENVELOPES = {
 def parse_dt(value):
     if not value:
         return None
+    raw = str(value).strip()
     try:
-        return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
     except ValueError:
-        return None
+        parsed = None
+        for fmt in ('%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%d/%m/%Y',
+                    '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'):
+            try:
+                parsed = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+        if parsed is None:
+            return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 def validate_dataset(rel, min_stations, min_prices):
     payload = json.loads((ROOT / rel).read_text(encoding='utf-8'))
@@ -41,6 +52,9 @@ def validate_dataset(rel, min_stations, min_prices):
 
     price_count = 0
     latest_price = None
+    stale_prices = []
+    missing_dates = []
+    province_price_counts = {}
     invalid_coords = []
     gross_geo_mismatches = []
     for s in stations:
@@ -59,9 +73,19 @@ def validate_dataset(rel, min_stations, min_prices):
             if price <= 0:
                 continue
             price_count += 1
+            province = str(s.get('province') or '').upper()
+            province_price_counts[province] = province_price_counts.get(province, 0) + 1
             updated = parse_dt(info.get('updated')) if isinstance(info, dict) else None
-            if updated and (latest_price is None or updated > latest_price):
-                latest_price = updated
+            if updated:
+                if latest_price is None or updated > latest_price:
+                    latest_price = updated
+                age_hours = (datetime.now(timezone.utc) - updated).total_seconds() / 3600
+                if age_hours > 48:
+                    stale_prices.append((str(s.get('id')), province, age_hours))
+                elif age_hours < -24:
+                    stale_prices.append((str(s.get('id')), province, age_hours))
+            else:
+                missing_dates.append((str(s.get('id')), province, info.get('updated') if isinstance(info, dict) else None))
 
     if invalid_coords:
         raise SystemExit(f'{rel}: coordinate non valide per {len(invalid_coords)} impianti, esempi {invalid_coords[:5]}')
@@ -70,8 +94,17 @@ def validate_dataset(rel, min_stations, min_prices):
     if price_count < min_prices:
         raise SystemExit(f'{rel}: solo {price_count} prezzi validi')
 
-    snap = metadata.get('source_snapshot_date')
     mode = str(metadata.get('source_mode') or '')
+    if 'live' in mode.lower() or 'api' in mode.lower():
+        if missing_dates:
+            raise SystemExit(f'{rel}: {len(missing_dates)} prezzi senza data valida, esempi {missing_dates[:5]}')
+        if stale_prices:
+            raise SystemExit(f'{rel}: {len(stale_prices)} prezzi fuori finestra 48 ore o futuri, esempi {stale_prices[:5]}')
+        if rel.endswith('stations.json'):
+            missing_provinces = sorted(set(PROVINCE_ENVELOPES) - {p for p, count in province_price_counts.items() if count > 0})
+            if missing_provinces:
+                raise SystemExit(f'{rel}: nessun prezzo aggiornato per province {missing_provinces}')
+    snap = metadata.get('source_snapshot_date')
     if snap:
         age = (datetime.now(timezone.utc).date() - datetime.fromisoformat(snap).date()).days
         print(f'{rel}: {n} impianti, {price_count} prezzi, snapshot {snap}, età {age} giorni, fonte {mode}')
