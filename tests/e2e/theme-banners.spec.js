@@ -37,7 +37,7 @@ test('all theme banners load panoramically and header controls stay usable', asy
   const smartHead = page.locator('#smartHead');
   if (await smartHead.count()) {
     await expect(refresh).toHaveAttribute('aria-label', /Ricarica i dati prezzi pubblicati/);
-    await expect(refresh).toHaveJSProperty('parentElement', await smartHead.elementHandle());
+    expect(await refresh.evaluate(button => button.parentElement?.id)).toBe('smartHead');
     await expect(page.getByText('Scelte rapide', { exact: true })).toHaveCount(0);
   }
 
