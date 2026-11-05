@@ -144,12 +144,12 @@ body[data-layout] .topbar{background-position:left 14px,center center!important}
 @media(max-width:700px){body[data-layout] .topbar{background-position:left 12px,center center!important}}
 
 
-/* Keep full-size character art on the left and continue the same scene behind it across wide headers. */
+
+/* Use one undistorted panorama; mobile cover keeps the full face in the visible top band. */
 body[data-layout] .topbar{
-  background-image:var(--theme-art),var(--theme-art),linear-gradient(115deg,var(--theme-top-a),var(--theme-top-b))!important;
-  background-size:contain,cover,cover!important;
-  background-position:left center,center center,center center!important;
-  background-repeat:no-repeat,no-repeat,no-repeat!important;
+  background-image:var(--theme-art),linear-gradient(115deg,var(--theme-top-a),var(--theme-top-b))!important;
+  background-size:auto 100%,cover!important;
+  background-position:left top,center center!important;
+  background-repeat:no-repeat,no-repeat!important;
 }
-@media(max-width:700px){body[data-layout] .topbar{background-size:contain,cover,cover!important;background-position:left center,center center,center center!important}}
-@media(max-width:420px){body[data-layout] .topbar{background-size:contain,cover,cover!important;background-position:left center,center center,center center!important}}
+@media(max-width:700px){body[data-layout] .topbar{background-size:cover,cover!important;background-position:left top,center center!important}}
