@@ -121,13 +121,16 @@ def main():
  provinces=[(region_by_province[p],p) for p in province_codes if p in region_by_province]
  if len(provinces)<90:raise RuntimeError(f'Elenco province incompleto ({len(provinces)})')
  fetched_provinces=api_stations=price_rows=new_stations=0; fetched_at=datetime.now(timezone.utc).isoformat()
+ # Rimuovi in memoria i prezzi ereditati: un impianto/carburante assente dalla
+ # risposta live non deve essere pubblicato come se fosse stato appena aggiornato.
+ for station in by_id.values(): station['prices']={}
  for region,province in provinces:
   try:
    # fuelType intenzionalmente omesso: l'API restituisce tutti i carburanti.
    payload=request_json('search/area',{'region':region,'province':province,'town':None,'priceOrder':'asc'})
    rows=unwrap_rows(payload)
   except Exception as exc:
-   print(f'{province}: API non disponibile ({exc})',flush=True); continue
+   raise RuntimeError(f'{province}: aggiornamento API incompleto: {exc}') from exc
   if not rows:
    print(f'{province}: nessun risultato',flush=True); continue
   fetched_provinces+=1; api_stations+=len(rows)
@@ -156,8 +159,12 @@ def main():
     updated=p.get('dtComu') or p.get('updated') or p.get('date') or item.get('insertDate')
     selected[fuel]=choose(selected.get(fuel),{'price':round(price,3),'self':selfv,'updated':updated}); price_rows+=1
    if selected:station['prices'].update(selected)
- if fetched_provinces<90 or api_stations<12000 or price_rows<15000:
-  raise RuntimeError(f'API Osservaprezzi incompleta: province={fetched_provinces}, impianti={api_stations}, prezzi={price_rows}')
+ expected_provinces=len(provinces)
+ if fetched_provinces != expected_provinces or api_stations<12000 or price_rows<15000:
+  raise RuntimeError(f'API Osservaprezzi incompleta: province={fetched_provinces}/{expected_provinces}, impianti={api_stations}, prezzi={price_rows}')
+ # Verifica che ogni provincia e ogni prezzo scritto siano realmente presenti e datati.
+ missing_tuscany=sorted(TUSCANY-{str(s.get('province','')).upper() for s in by_id.values() if s.get('prices')})
+ if missing_tuscany:raise RuntimeError(f'API Osservaprezzi senza prezzi aggiornati in province toscane: {missing_tuscany}')
  stations=[s for s in by_id.values() if s.get('prices')]; stations.sort(key=lambda s:(s.get('province',''),s.get('city',''),s.get('name',''),str(s['id'])))
  meta={'generated_at':fetched_at,'source':'MIMIT Osservaprezzi - API pubblica v2','source_mode':'mimit-osservaprezzi-live-api-v2','source_snapshot_date':datetime.now(timezone.utc).date().isoformat(),'source_prices':f'{BASE}/search/area','stations':len(stations),'api_provinces':fetched_provinces,'api_station_results':api_stations,'api_price_rows':price_rows}
  national['stations']=stations; national['metadata'].update(meta)
