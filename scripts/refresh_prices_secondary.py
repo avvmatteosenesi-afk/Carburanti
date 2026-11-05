@@ -140,10 +140,12 @@ def main():
   except Exception as exc:
    fallback_provinces.append(province)
    print(f'{province}: API non disponibile; mantengo la base MIMIT ({exc})',flush=True)
+   if len(fallback_provinces)>17: break
    continue
   if not rows:
    fallback_provinces.append(province)
    print(f'{province}: risposta API vuota; mantengo la base MIMIT',flush=True)
+   if len(fallback_provinces)>17: break
    continue
   # Rimpiazza i dati di base solo per le province che hanno risposto con dati live.
   for old_station in by_id.values():
