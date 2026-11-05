@@ -34,11 +34,11 @@ test('all theme banners load panoramically and header controls stay usable', asy
   await expect(settings).toBeEnabled();
   await expect(refresh).toBeVisible();
   await expect(refresh).toBeEnabled();
-  const refreshHelp = page.locator('#refreshHelp');
-  if (await refreshHelp.count()) {
+  const smartHead = page.locator('#smartHead');
+  if (await smartHead.count()) {
     await expect(refresh).toHaveAttribute('aria-label', /Ricarica i dati prezzi pubblicati/);
-    await expect(refresh).toHaveAttribute('aria-describedby', 'refreshHelp');
-    await expect(refreshHelp).toContainText('aggiornamento prezzi automatico');
+    await expect(refresh).toHaveJSProperty('parentElement', await smartHead.elementHandle());
+    await expect(page.getByText('Scelte rapide', { exact: true })).toHaveCount(0);
   }
 
   await settings.click();
