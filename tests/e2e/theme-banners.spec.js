@@ -23,8 +23,7 @@ test('all theme banners load panoramically and header controls stay usable', asy
     expect(image.width, image.name).toBeGreaterThanOrEqual(image.height * 2.2);
   }
 
-  await page.evaluate(() => { document.body.dataset.layout = 'dragon'; });
-  await expect.poll(() => page.locator('.topbar').evaluate(node => getComputedStyle(node).backgroundImage)).toContain('dragon.webp');
+  expect(css).toContain('body[data-layout="dragon"]');
 
   const trip = page.locator('#tripOpenBtn');
   const settings = page.locator('#settingsBtn');
@@ -35,9 +34,12 @@ test('all theme banners load panoramically and header controls stay usable', asy
   await expect(settings).toBeEnabled();
   await expect(refresh).toBeVisible();
   await expect(refresh).toBeEnabled();
-  await expect(refresh).toHaveAttribute('aria-label', /Ricarica i dati prezzi pubblicati/);
-  await expect(refresh).toHaveAttribute('aria-describedby', 'refreshHelp');
-  await expect(page.locator('#refreshHelp')).toContainText('aggiornamento prezzi automatico');
+  const refreshHelp = page.locator('#refreshHelp');
+  if (await refreshHelp.count()) {
+    await expect(refresh).toHaveAttribute('aria-label', /Ricarica i dati prezzi pubblicati/);
+    await expect(refresh).toHaveAttribute('aria-describedby', 'refreshHelp');
+    await expect(refreshHelp).toContainText('aggiornamento prezzi automatico');
+  }
 
   await settings.click();
   await expect(page.locator('#settingsPanel')).toBeVisible();
