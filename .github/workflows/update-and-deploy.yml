@@ -69,7 +69,8 @@ jobs:
           if python scripts/refresh_prices_secondary.py; then
             echo "Osservaprezzi live API aggiornata correttamente."
           else
-            echo "::error::API Osservaprezzi indisponibile o incompleta; la validazione impedirà il deploy di prezzi obsoleti."
+            echo "::error::API Osservaprezzi indisponibile o incompleta; deploy interrotto per evitare prezzi non aggiornati."
+            exit 1
           fi
 
       - name: Validate data and release integrity
