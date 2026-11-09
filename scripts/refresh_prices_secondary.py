@@ -7,7 +7,8 @@ gli impianti e tutti i carburanti disponibili. Nessun dataset parziale viene
 pubblicato.
 """
 from __future__ import annotations
-import json, time, urllib.request
+import json, time, urllib.request, urllib.error
+from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
 from data_freshness import MAX_PRICE_AGE, parse_timestamp, price_is_current
 from pathlib import Path
@@ -15,6 +16,9 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]; DATA=ROOT/'data'
 BASE='https://carburanti.mise.gov.it/ospzApi'
 UA='Mozilla/5.0 (compatible; Carburanti-PWA/1.5; +GitHub-Pages)'
+# Serialize requests with a conservative cadence; GitHub runners share public IPs.
+MIN_REQUEST_INTERVAL=3.0
+_last_request_at=None
 TUSCANY={'AR','FI','GR','LI','LU','MS','PI','PT','PO','SI'}
 PROVINCE_BOUNDS={'AR':(43.15,11.30,43.86,12.22),'FI':(43.37,10.58,44.24,11.82),'GR':(42.18,10.50,43.29,11.78),'LI':(42.68,9.65,43.67,10.78),'LU':(43.64,10.00,44.36,10.84),'MS':(43.91,9.68,44.55,10.42),'PI':(43.28,10.20,43.91,11.02),'PT':(43.73,10.50,44.25,11.14),'PO':(43.72,10.84,44.19,11.31),'SI':(42.83,10.70,43.65,11.91)}
 
@@ -32,6 +36,7 @@ REGION_PROVINCES={
 }
 
 def request_json(path,payload=None,timeout=30,attempts=3):
+ global _last_request_at
  url=f"{BASE}/{path.lstrip('/')}"; data=None
  headers={'User-Agent':UA,'Accept':'application/json','Referer':'https://carburanti.mise.gov.it/ospzSearch/'}; method='GET'
  if payload is not None:
@@ -39,6 +44,9 @@ def request_json(path,payload=None,timeout=30,attempts=3):
  last=None
  for attempt in range(attempts):
   try:
+   if _last_request_at is not None:
+    time.sleep(max(0,MIN_REQUEST_INTERVAL-(time.monotonic()-_last_request_at)))
+   _last_request_at=time.monotonic()
    req=urllib.request.Request(url,data=data,headers=headers,method=method)
    with urllib.request.urlopen(req,timeout=timeout) as r:
     raw=r.read().decode('utf-8','replace')
@@ -46,8 +54,22 @@ def request_json(path,payload=None,timeout=30,attempts=3):
     return json.loads(raw)
   except Exception as exc:
    last=exc
-   if attempt+1<attempts: time.sleep(2*(attempt+1))
+   if attempt+1<attempts:
+    delay=2*(attempt+1)
+    if isinstance(exc,urllib.error.HTTPError) and exc.code==429:
+     delay=rate_limit_delay(exc,attempt)
+     print(f'API MIMIT: limite richieste HTTP 429; attendo {delay:.0f}s prima del retry.',flush=True)
+    time.sleep(delay)
  raise last
+
+def rate_limit_delay(error,attempt):
+ # Honor either form of Retry-After, without retrying sooner than the server asks.
+ value=error.headers.get('Retry-After') if error.headers else None
+ try:requested=float(value)
+ except (TypeError,ValueError):
+  try:requested=(parsedate_to_datetime(value)-datetime.now(timezone.utc)).total_seconds()
+  except (TypeError,ValueError,OverflowError):requested=0
+ return max(60*(attempt+1),requested)
 
 def parse_float(v):
  try:return float(str(v).replace(',','.'))
@@ -128,6 +150,8 @@ def main():
    payload=request_json('search/area',{'region':region,'province':province,'town':None,'priceOrder':'asc'})
    rows=unwrap_rows(payload)
   except Exception as exc:
+   if isinstance(exc,urllib.error.HTTPError) and exc.code==429:
+    raise RuntimeError('API MIMIT ancora limitata dopo le attese; interrompo per non moltiplicare le richieste') from exc
    fallback_provinces.append(province)
    print(f'{province}: API non disponibile; mantengo la base MIMIT ({exc})',flush=True)
    if len(fallback_provinces)>17: break

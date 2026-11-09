@@ -10,6 +10,9 @@ from unittest.mock import patch
 
 from data_freshness import MAX_PRICE_AGE, parse_timestamp, price_is_current
 import validate_release
+import refresh_prices_secondary
+from urllib.error import HTTPError
+from email.message import Message
 
 
 class FreshnessTests(unittest.TestCase):
@@ -76,6 +79,29 @@ class FreshnessTests(unittest.TestCase):
     def test_italian_and_iso_timestamp_parsing(self):
         self.assertEqual(parse_timestamp('09/11/2026 10:30:00'), parse_timestamp('2026-11-09T10:30:00Z'))
         self.assertEqual(parse_timestamp('2026-11-09T11:30:00+01:00'), parse_timestamp('2026-11-09T10:30:00Z'))
+
+    def test_rate_limit_honors_server_retry_after(self):
+        headers = Message()
+        headers['Retry-After'] = '180'
+        error = HTTPError('https://example.test', 429, 'Too Many Requests', headers, None)
+        self.assertEqual(refresh_prices_secondary.rate_limit_delay(error, 0), 180)
+        self.assertEqual(refresh_prices_secondary.rate_limit_delay(error, 3), 240)
+        headers.replace_header('Retry-After', 'invalid')
+        self.assertEqual(refresh_prices_secondary.rate_limit_delay(error, 0), 60)
+
+    def test_rate_limited_request_waits_then_retries(self):
+        headers = Message()
+        headers['Retry-After'] = '90'
+        error = HTTPError('https://example.test', 429, 'Too Many Requests', headers, None)
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"results": []}'
+        with patch.object(refresh_prices_secondary, '_last_request_at', None), \
+             patch.object(refresh_prices_secondary.urllib.request, 'urlopen', side_effect=[error, response]), \
+             patch.object(refresh_prices_secondary.time, 'sleep') as sleep, \
+             patch('builtins.print'):
+            self.assertEqual(refresh_prices_secondary.request_json('search/area'), {'results': []})
+            self.assertIn(unittest.mock.call(90.0), sleep.call_args_list)
 
 
 if __name__ == '__main__':
