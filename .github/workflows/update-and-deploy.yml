@@ -31,6 +31,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Test data freshness safeguards
+        run: python -m unittest discover -s scripts -p 'test_*.py' -v
+
       - name: Diagnose MIMIT endpoints
         shell: bash
         run: |

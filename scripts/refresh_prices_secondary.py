@@ -9,6 +9,7 @@ pubblicato.
 from __future__ import annotations
 import json, time, urllib.request
 from datetime import datetime, timedelta, timezone
+from data_freshness import MAX_PRICE_AGE, parse_timestamp, price_is_current
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]; DATA=ROOT/'data'
@@ -51,17 +52,6 @@ def request_json(path,payload=None,timeout=30,attempts=3):
 def parse_float(v):
  try:return float(str(v).replace(',','.'))
  except (TypeError,ValueError):return None
-def parse_timestamp(value):
- if not value:return None
- raw=str(value).strip()
- try:dt=datetime.fromisoformat(raw.replace('Z','+00:00'))
- except ValueError:
-  dt=None
-  for fmt in ('%d/%m/%Y %H:%M:%S','%d/%m/%Y %H:%M','%d/%m/%Y','%Y-%m-%d %H:%M:%S','%Y-%m-%d %H:%M'):
-   try:dt=datetime.strptime(raw,fmt); break
-   except ValueError:continue
- if dt is None:return None
- return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 def valid_italy(lat,lon):return lat is not None and lon is not None and 35<=lat<=48.5 and 5.5<=lon<=19.5
 def within_bbox(code,lat,lon):
  b=PROVINCE_BOUNDS.get(code); return not b or (b[0]<=lat<=b[2] and b[1]<=lon<=b[3])
@@ -131,7 +121,7 @@ def main():
  region_by_province={p:r for r,ps in REGION_PROVINCES.items() for p in ps}
  provinces=[(region_by_province[p],p) for p in province_codes if p in region_by_province]
  if len(provinces)<90:raise RuntimeError(f'Elenco province incompleto ({len(provinces)})')
- fetched_provinces=api_stations=price_rows=new_stations=stale_price_rows=0; fetched_at=datetime.now(timezone.utc).isoformat(); fallback_provinces=[]
+ fetched_provinces=api_stations=price_rows=new_stations=stale_price_rows=0; acquired_at=datetime.now(timezone.utc); fetched_at=acquired_at.isoformat(); fallback_provinces=[]
  for region,province in provinces:
   try:
    # fuelType intenzionalmente omesso: l'API restituisce tutti i carburanti.
@@ -175,7 +165,9 @@ def main():
     selfv=str(p.get('isSelf') if 'isSelf' in p else p.get('self',0)).lower() in ('1','true')
     updated=p.get('dtComu') or p.get('updated') or p.get('date') or item.get('insertDate')
     parsed_updated=parse_timestamp(updated)
-    if parsed_updated is None or (datetime.now(timezone.utc)-parsed_updated).total_seconds()>46*3600 or parsed_updated>datetime.now(timezone.utc)+timedelta(hours=24):
+    # Leave two hours for validation, tests and Pages propagation so a price
+    # does not expire between acquisition and publication.
+    if not price_is_current(parsed_updated, acquired_at, max_age=MAX_PRICE_AGE-timedelta(hours=2)):
      stale_price_rows+=1; continue
     selected[fuel]=choose(selected.get(fuel),{'price':round(price,3),'self':selfv,'updated':parsed_updated.isoformat()}); price_rows+=1
    if selected:station['prices'].update(selected)
@@ -188,10 +180,10 @@ def main():
  missing_tuscany=sorted(TUSCANY-{str(s.get('province','')).upper() for s in by_id.values() if s.get('prices')})
  if missing_tuscany:raise RuntimeError(f'API Osservaprezzi senza prezzi aggiornati in province toscane: {missing_tuscany}')
  stations=[s for s in by_id.values() if s.get('prices')]; stations.sort(key=lambda s:(s.get('province',''),s.get('city',''),s.get('name',''),str(s['id'])))
- meta={'generated_at':fetched_at,'source':'MIMIT Osservaprezzi - API pubblica v2','source_mode':'mimit-osservaprezzi-live-api-v2','source_snapshot_date':datetime.now(timezone.utc).date().isoformat(),'source_prices':f'{BASE}/search/area','stations':len(stations),'api_provinces':fetched_provinces,'api_fallback_provinces':fallback_provinces,'api_station_results':api_stations,'api_price_rows':price_rows}
+ meta={'generated_at':fetched_at,'source':'MIMIT Osservaprezzi - API pubblica v2','source_mode':'mimit-osservaprezzi-live-api-v2','source_snapshot_date':datetime.now(timezone.utc).date().isoformat(),'source_prices':f'{BASE}/search/area','stations':len(stations),'api_provinces':fetched_provinces,'api_fallback_provinces':fallback_provinces,'api_station_results':api_stations,'api_price_rows':price_rows,'price_max_age_days':MAX_PRICE_AGE.days,'api_discarded_price_rows':stale_price_rows}
  national['stations']=stations; national['metadata'].update(meta)
  tus=[s for s in stations if s.get('province') in TUSCANY and within_bbox(s.get('province'),s['lat'],s['lon'])]
  old_tus=json.loads(tuscany_path.read_text(encoding='utf-8')); old_tus['stations']=tus; old_tus['metadata'].update(meta|{'stations':len(tus)})
  national_path.write_text(json.dumps(national,ensure_ascii=False,separators=(',',':')),encoding='utf-8'); tuscany_path.write_text(json.dumps(old_tus,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
- print(f'Osservaprezzi API v2 OK: {fetched_provinces} province, {api_stations} impianti, {price_rows} prezzi recenti, {stale_price_rows} righe prezzo scartate per data assente/obsoleta, {new_stations} nuovi.',flush=True)
+ print(f'Osservaprezzi API v2 OK: {fetched_provinces} province, {api_stations} impianti, {price_rows} prezzi entro {MAX_PRICE_AGE.days} giorni, {stale_price_rows} righe prezzo scartate per data assente/obsoleta, {new_stations} nuovi.',flush=True)
 if __name__=='__main__':main()

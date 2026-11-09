@@ -2,6 +2,7 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from data_freshness import MAX_DATASET_AGE, MAX_FUTURE_SKEW, MAX_PRICE_AGE, parse_timestamp, price_is_current
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = ['index.html','app.js','trip.js','marker-fix.js','zone-colors-v2.js','location-visibility.js','manifest.webmanifest','data/stations.json','data/stations-it.json']
@@ -19,24 +20,7 @@ PROVINCE_ENVELOPES = {
     'PT': (43.50, 44.50, 10.25, 11.45), 'SI': (42.55, 43.90, 10.45, 12.20),
 }
 
-def parse_dt(value):
-    if not value:
-        return None
-    raw = str(value).strip()
-    try:
-        parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
-    except ValueError:
-        parsed = None
-        for fmt in ('%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%d/%m/%Y',
-                    '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'):
-            try:
-                parsed = datetime.strptime(raw, fmt)
-                break
-            except ValueError:
-                continue
-        if parsed is None:
-            return None
-    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+parse_dt = parse_timestamp
 
 def validate_dataset(rel, min_stations, min_prices):
     payload = json.loads((ROOT / rel).read_text(encoding='utf-8'))
@@ -49,6 +33,11 @@ def validate_dataset(rel, min_stations, min_prices):
     declared = metadata.get('stations')
     if declared is not None and int(declared) != n:
         raise SystemExit(f'{rel}: metadata stations={declared}, contenuto={n}')
+
+    now = datetime.now(timezone.utc)
+    generated = parse_dt(metadata.get('generated_at'))
+    if generated is None or not -MAX_FUTURE_SKEW <= now - generated <= MAX_DATASET_AGE:
+        raise SystemExit(f'{rel}: acquisizione assente, futura o più vecchia di 48 ore')
 
     price_count = 0
     latest_price = None
@@ -80,9 +69,7 @@ def validate_dataset(rel, min_stations, min_prices):
                 if latest_price is None or updated > latest_price:
                     latest_price = updated
                 age_hours = (datetime.now(timezone.utc) - updated).total_seconds() / 3600
-                if age_hours > 48:
-                    stale_prices.append((str(s.get('id')), province, age_hours))
-                elif age_hours < -24:
+                if not price_is_current(updated, now):
                     stale_prices.append((str(s.get('id')), province, age_hours))
             else:
                 missing_dates.append((str(s.get('id')), province, info.get('updated') if isinstance(info, dict) else None))
@@ -95,15 +82,14 @@ def validate_dataset(rel, min_stations, min_prices):
         raise SystemExit(f'{rel}: solo {price_count} prezzi validi')
 
     mode = str(metadata.get('source_mode') or '')
-    if 'live' in mode.lower() or 'api' in mode.lower():
-        if missing_dates:
-            raise SystemExit(f'{rel}: {len(missing_dates)} prezzi senza data valida, esempi {missing_dates[:5]}')
-        if stale_prices:
-            raise SystemExit(f'{rel}: {len(stale_prices)} prezzi fuori finestra 48 ore o futuri, esempi {stale_prices[:5]}')
-        if rel.endswith('stations.json'):
-            missing_provinces = sorted(set(PROVINCE_ENVELOPES) - {p for p, count in province_price_counts.items() if count > 0})
-            if missing_provinces:
-                raise SystemExit(f'{rel}: nessun prezzo aggiornato per province {missing_provinces}')
+    if missing_dates:
+        raise SystemExit(f'{rel}: {len(missing_dates)} prezzi senza data valida, esempi {missing_dates[:5]}')
+    if stale_prices:
+        raise SystemExit(f'{rel}: {len(stale_prices)} prezzi fuori finestra {MAX_PRICE_AGE.days} giorni o futuri, esempi {stale_prices[:5]}')
+    if rel.endswith('stations.json'):
+        missing_provinces = sorted(set(PROVINCE_ENVELOPES) - {p for p, count in province_price_counts.items() if count > 0})
+        if missing_provinces:
+            raise SystemExit(f'{rel}: nessun prezzo aggiornato per province {missing_provinces}')
     snap = metadata.get('source_snapshot_date')
     if snap:
         age = (datetime.now(timezone.utc).date() - datetime.fromisoformat(snap).date()).days
@@ -123,21 +109,26 @@ def validate_dataset(rel, min_stations, min_prices):
         if latest_age > 2:
             raise SystemExit(f'{rel}: nessun prezzo aggiornato negli ultimi 48 ore ({latest_age:.1f} giorni)')
 
-validate_dataset('data/stations-it.json', 15000, 25000)
-validate_dataset('data/stations.json', 900, 1500)
+def main():
+    validate_dataset('data/stations-it.json', 15000, 25000)
+    validate_dataset('data/stations.json', 900, 1500)
 
-html = (ROOT / 'index.html').read_text(encoding='utf-8')
-for token in ['trip.js','marker-fix.js','zone-colors-v2.js','location-visibility.js']:
-    if token not in html:
-        raise SystemExit('index.html non include ' + token)
+    html = (ROOT / 'index.html').read_text(encoding='utf-8')
+    for token in ['trip.js','marker-fix.js','zone-colors-v2.js','location-visibility.js']:
+        if token not in html:
+            raise SystemExit('index.html non include ' + token)
 
-manifest = json.loads((ROOT / 'manifest.webmanifest').read_text(encoding='utf-8'))
-if manifest.get('display') != 'standalone':
-    raise SystemExit('manifest: display deve essere standalone')
-icon_sizes = {i.get('sizes') for i in manifest.get('icons', [])}
-if not {'192x192', '512x512'}.issubset(icon_sizes):
-    raise SystemExit('manifest: icone 192x192 e 512x512 mancanti')
-if 'apple-touch-icon' not in html or 'carburanti-green-180.png' not in html:
-    raise SystemExit('index.html: apple-touch-icon 180x180 mancante')
+    manifest = json.loads((ROOT / 'manifest.webmanifest').read_text(encoding='utf-8'))
+    if manifest.get('display') != 'standalone':
+        raise SystemExit('manifest: display deve essere standalone')
+    icon_sizes = {i.get('sizes') for i in manifest.get('icons', [])}
+    if not {'192x192', '512x512'}.issubset(icon_sizes):
+        raise SystemExit('manifest: icone 192x192 e 512x512 mancanti')
+    if 'apple-touch-icon' not in html or 'carburanti-green-180.png' not in html:
+        raise SystemExit('index.html: apple-touch-icon 180x180 mancante')
 
-print('Validazione release OK')
+    print('Validazione release OK')
+
+
+if __name__ == '__main__':
+    main()
