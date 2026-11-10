@@ -70,6 +70,8 @@
   function updateLegend(mode) {
     const legend = document.querySelector('.controls-card .legend');
     if (!legend) return;
+    legend.setAttribute('aria-label', mode === 'adaptive' ? 'Colori relativi ai prezzi della zona: minimo, fascia più bassa fino al 35%, intermedia fino al 70%, altri' : 'Colori rispetto al prezzo minimo della zona');
+    legend.title = mode === 'adaptive' ? 'Nelle tre zone rapide ampie: verde minimo; azzurro fino al 35° percentile; giallo fino al 70°; rosso altri.' : 'Gli scarti sono calcolati rispetto al minimo della zona e del carburante selezionati.';
     const spans = legend.querySelectorAll('span');
     if (spans[0]) spans[0].lastChild.textContent = ' minimo';
     if (mode === 'adaptive') {
@@ -91,7 +93,7 @@
 
   function recolor() {
     const markers = Array.from(document.querySelectorAll('#map .price-marker'));
-    if (!markers.length) return;
+    if (!markers.length) {updateLegend(wideZone() ? 'wide' : 'standard');return;}
 
     const zone = currentZone();
     const markerPrices = markers.map(el => parsePrice(el.textContent)).filter(Number.isFinite);

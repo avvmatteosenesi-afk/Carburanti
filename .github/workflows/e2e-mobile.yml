@@ -2,8 +2,9 @@ name: Mobile E2E regression tests
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [Update fuel prices and deploy]
+    types: [completed]
   schedule:
     - cron: '41 5 * * *'
 
@@ -16,6 +17,7 @@ concurrency:
 
 jobs:
   mobile-e2e:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

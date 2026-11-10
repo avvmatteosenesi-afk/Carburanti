@@ -19,7 +19,7 @@ def get(path,attempts=6,expected=None):
   except Exception as e:
    last=e; time.sleep(5*(i+1))
  raise last
-for asset in ['index.html','app.js','marker-fix.js','manifest.webmanifest','carburanti-green-180.png','layout-themes.css','refresh-ui.js']:
+for asset in ['index.html','app.js','marker-fix.js','manifest.webmanifest','carburanti-green-180.png','layout-themes.css','refresh-ui.js','data-health.js','trip-services.js','sw.js','vendor/leaflet-1.9.4/leaflet.js','vendor/leaflet-1.9.4/leaflet.css']:
  data=get(asset)
  if len(data)<100: raise SystemExit(f'{asset}: risposta troppo piccola')
 # Controlla che tutti i banner dei temi pubblicati siano referenziati dal CSS,

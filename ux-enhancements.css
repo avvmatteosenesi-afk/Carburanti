@@ -12,3 +12,12 @@ body{background-color:#eef8ff;background-image:radial-gradient(circle at 10px 10
 .data-stale{font-weight:700}.hidden{display:none!important}
 @media(max-width:700px){.smart-fuel-card{margin:0 4px 3px;padding:3px 5px;gap:5px;min-height:36px}.smart-head strong{font-size:9px}.smart-row{min-height:28px;padding:3px 6px;gap:5px}.smart-nearest-label{font-size:10px}.smart-nearest-station{font-size:10px}.smart-nearest-station small{font-size:9px}.smart-row b{font-size:11px}.controls-card{box-shadow:3px 4px 0 rgba(23,33,43,.12),0 5px 16px rgba(22,34,48,.08)}.map-card{box-shadow:3px 4px 0 rgba(32,198,255,.24),-2px 0 0 rgba(255,216,77,.26),0 6px 18px rgba(22,34,48,.10)}}
 @media(max-width:390px){.smart-fuel-card{grid-template-columns:1fr}.smart-head{display:flex}.smart-row{grid-template-columns:auto minmax(0,1fr) auto}.smart-nearest-station small{display:none}}
+/* Compact, accessible data details without changing the approved banners. */
+#dataStatus[role="button"]{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+#dataStatus:focus-visible{outline:2px solid #1267d6;outline-offset:3px}
+.data-freshness-notice{margin:0 0 4px;padding:5px 7px;border-radius:7px;background:#fff0d1;color:#613c00;font-size:11px;font-weight:700}
+.data-freshness-notice[hidden],.data-info-backdrop[hidden]{display:none!important}
+.data-info-backdrop{position:fixed;inset:0;z-index:6000;background:#14202c88;display:grid;place-items:center;padding:16px}
+.data-info-card{width:min(100%,440px);max-height:85dvh;overflow:auto;padding:16px;border-radius:16px;background:#fff;color:#17212b;box-shadow:0 12px 50px #0004}
+.data-info-card h2{font-size:19px}.data-info-card dt{font-size:12px;color:#536171;margin-top:10px}.data-info-card dd{margin:2px 0;font-weight:700;font-size:14px}.data-info-card p{font-size:12px;line-height:1.5}
+.trip-access-check{display:block;margin-top:6px;min-height:34px;border:1px solid #8aa9c9;border-radius:7px;background:#eef6ff;color:#173c63;padding:4px 7px;font:inherit;font-size:12px}.trip-access-result{display:block;margin-top:5px;font-size:11px;line-height:1.35}

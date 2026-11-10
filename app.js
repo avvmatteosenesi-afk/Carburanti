@@ -199,7 +199,7 @@
       <div class="popup-price">${money(price)}</div>
       <div class="popup-meta">${escapeHtml(station.brand || '')}${station.brand ? '<br>' : ''}
       ${escapeHtml(station.address || '')}${station.city ? ` · ${escapeHtml(station.city)}` : ''}<br>
-      ${p.self === false ? 'Servito' : 'Self'} · aggiornato ${escapeHtml(updatedText)}<br>
+      ${p.self === false ? 'Servito' : 'Self'} · prezzo comunicato: ${escapeHtml(updatedText)}<br>
       <a href="${mapsUrl}" target="_blank" rel="noopener">Indicazioni</a></div>`;
   }
 
@@ -343,7 +343,7 @@
 
   function fitLocalRadius() {
     if (!state.userPos) return;
-    const bounds = L.circle([state.userPos.lat, state.userPos.lon], { radius: LOCAL_RADIUS_KM * 1000 }).getBounds();
+    const bounds = L.latLng(state.userPos.lat, state.userPos.lon).toBounds(LOCAL_RADIUS_KM * 2000);
     mapFitBounds(bounds, 13, [28, 28]);
   }
 
@@ -497,6 +497,7 @@
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     state.metadata = payload.metadata || {};
+    state.dataOffline = response.headers.get('X-Carburanti-Offline') === '1';
     state.stations = Array.isArray(payload.stations) ? payload.stations : [];
     state.loaded = true;
 
@@ -505,6 +506,7 @@
       ? stamp.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
       : 'dato disponibile';
     setStatus(`${state.stations.length.toLocaleString('it-IT')} impianti · agg. ${dateText}`);
+    window.dispatchEvent(new CustomEvent('carburanti:data-loaded'));
   }
 
   async function init() {
@@ -537,11 +539,12 @@
 
     if ('serviceWorker' in navigator) {
       try {
-        const registration = await navigator.serviceWorker.register(`sw.js?v=${VERSION}`, { scope: './' });
+        const hadController = Boolean(navigator.serviceWorker.controller);
+        const registration = await navigator.serviceWorker.register(`sw.js?v=20261110-priorities-1`, { scope: './' });
         registration.update().catch(() => {});
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (refreshing) return;
+          if (refreshing || !hadController) return;
           refreshing = true;
           location.reload();
         });

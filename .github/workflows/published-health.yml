@@ -1,0 +1,21 @@
+name: Published data health
+on:
+  workflow_run:
+    workflows: [Update fuel prices and deploy]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: published-data-health
+  cancel-in-progress: false
+jobs:
+  published-health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check published HTTP, dataset freshness and provenance
+        run: python scripts/check_published_health.py

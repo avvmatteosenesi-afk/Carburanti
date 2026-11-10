@@ -56,6 +56,7 @@ jobs:
           PY
 
       - name: Refresh MIMIT registry base with repository fallback
+        id: registry
         shell: bash
         run: |
           if python scripts/update_data.py; then
@@ -67,6 +68,7 @@ jobs:
           fi
 
       - name: Refresh current prices from official Osservaprezzi API
+        id: prices
         shell: bash
         run: |
           if python scripts/refresh_prices_secondary.py; then
@@ -77,7 +79,11 @@ jobs:
           fi
 
       - name: Validate data and release integrity
+        id: validation
         run: python scripts/validate_release.py
+
+      - name: Record validated dataset provenance
+        run: python scripts/release_health.py
 
       - name: Generate app icons
         run: |
@@ -98,6 +104,7 @@ jobs:
       - name: Install Playwright test dependencies
         run: |
           npm install --no-audit --no-fund
+          node --test tests/unit/*.test.js
           npx playwright install --with-deps chromium webkit
 
       - name: Run mobile viewport E2E tests against candidate build
@@ -113,6 +120,16 @@ jobs:
           done
           curl --fail --silent --output /dev/null http://127.0.0.1:4173/index.html
           PLAYWRIGHT_TEST_BASE_URL=http://127.0.0.1:4173/ npm run test:e2e
+
+      - name: Preserve mobile reports and layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-mobile-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
 
       - name: Build clean Pages artifact
         shell: bash
@@ -152,4 +169,29 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Post-deploy live smoke test
+        id: smoke
         run: python scripts/smoke_test_live.py
+
+      - name: Summarize acquisition, validation and publication
+        if: always()
+        env:
+          REGISTRY: ${{ steps.registry.outcome }}
+          PRICES: ${{ steps.prices.outcome }}
+          VALIDATION: ${{ steps.validation.outcome }}
+          DEPLOYMENT: ${{ steps.deployment.outcome }}
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: |
+          python - <<'PYTHON'
+          import os,json
+          from pathlib import Path
+          lines=['## Stato aggiornamento Carburanti','', '| Fase | Esito |','|---|---|']
+          for key in ['REGISTRY','PRICES','VALIDATION','DEPLOYMENT','SMOKE']:
+              lines.append(f'| {key} | {os.environ.get(key) or "non eseguita"} |')
+          lines += ['', 'Gli esiti delle fasi non sostituiscono la data dei dataset.']
+          for name in ['stations.json','stations-it.json']:
+              p=Path('data')/name
+              if p.exists():
+                  m=json.loads(p.read_text()).get('metadata',{})
+                  lines.append(f"- {name}: acquisiti {m.get('generated_at')}; fonte {m.get('source_mode')}; impianti {m.get('stations')}; province API {m.get('api_provinces')}; fallback province {m.get('api_fallback_provinces')}")
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:stream.write('\n'.join(lines)+'\n')
+          PYTHON

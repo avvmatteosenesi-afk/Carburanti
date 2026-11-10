@@ -25,7 +25,7 @@ async function assertFixedStats(page) {
 
 test.use({ ...devices['iPhone 14'] });
 
-test('minimum and average cards remain visible inside iPhone viewport in every layout', async ({ page }) => {
+test('minimum and average cards remain visible inside iPhone viewport in every layout', async ({ page }, testInfo) => {
   await page.goto('./', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#map')).toBeVisible();
   await expect(page.locator('#bestCard')).toBeVisible();
@@ -40,6 +40,8 @@ test('minimum and average cards remain visible inside iPhone viewport in every l
     }, layout);
     await page.waitForTimeout(150);
     await assertFixedStats(page);
+    await expect(page.locator('.controls-card > .legend')).toBeVisible();
+    await testInfo.attach(`layout-${layout}`, {body:await page.screenshot(),contentType:'image/png'});
   }
 });
 

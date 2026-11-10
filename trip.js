@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261024-7';
+  const VERSION = '20261110-priorities-1';
   const NATIONAL_DATA_URL = `data/stations-it.json?v=${VERSION}`;
   const ITALY_CENTER = [42.5, 12.5];
   const trip = {
@@ -13,7 +13,11 @@
     toCoords: null,
     userPos: null,
     active: false,
-    activePopup: null
+    activePopup: null,
+    requestController: null,
+    runId: 0,
+    currentRoute: null,
+    nationalLoad: null
   };
   const el = {};
   const qs = id => document.getElementById(id);
@@ -69,19 +73,28 @@
 
   function closeTrip() {
     trip.active = false;
+    trip.runId += 1;
+    trip.requestController?.abort();
+    el.tripGoBtn.disabled = false;
+    el.tripGoBtn.textContent = 'Calcola percorso';
     try { trip.map?.closePopup(); } catch (_) {}
     trip.activePopup = null;
     el.tripPanel.classList.add('hidden');
     el.tripPanel.setAttribute('aria-hidden', 'true');
   }
 
-  async function loadNationalData() {
+  function loadNationalData() {
+    if (trip.nationalStations) return Promise.resolve(trip.nationalStations);
+    if (!trip.nationalLoad) trip.nationalLoad=fetchNationalData().finally(()=>{trip.nationalLoad=null;});
+    return trip.nationalLoad;
+  }
+
+  async function fetchNationalData() {
     if (trip.nationalStations) return trip.nationalStations;
     showMessage('Caricamento distributori italiani…');
-    const r = await fetch(NATIONAL_DATA_URL, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const p = await r.json();
-    trip.nationalStations = Array.isArray(p.stations) ? p.stations : [];
+    const p = await window.CarburantiServices.json(NATIONAL_DATA_URL, {timeout:20000,label:'Dati nazionali'});
+    if (!Array.isArray(p.stations) || !p.stations.length) throw new Error('Dataset nazionale vuoto o non valido. Riprova.');
+    trip.nationalStations = p.stations;
     showMessage(`${trip.nationalStations.length.toLocaleString('it-IT')} distributori disponibili in Italia.`);
     return trip.nationalStations;
   }
@@ -97,16 +110,12 @@
     } else {
       params.set('q', q);
     }
-    let r = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, { headers: { 'Accept-Language': 'it' } });
-    if (!r.ok) throw new Error('Servizio di ricerca località non disponibile');
-    let list = await r.json();
+    let list = await window.CarburantiServices.geocode(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {signal:trip.requestController?.signal});
     if (simple && (!Array.isArray(list) || !list.length)) {
       const fallback = new URLSearchParams({
         format: 'jsonv2', limit: '10', countrycodes: 'it', addressdetails: '1', featureType: 'settlement', q: `${q}, Italia`
       });
-      r = await fetch(`https://nominatim.openstreetmap.org/search?${fallback.toString()}`, { headers: { 'Accept-Language': 'it' } });
-      if (!r.ok) throw new Error('Servizio di ricerca località non disponibile');
-      list = await r.json();
+      list = await window.CarburantiServices.geocode(`https://nominatim.openstreetmap.org/search?${fallback.toString()}`, {signal:trip.requestController?.signal});
     }
     if (!Array.isArray(list) || !list.length) throw new Error(`Località non trovata: ${q}`);
     const norm = s => String(s || '').trim().toLocaleLowerCase('it-IT');
@@ -116,7 +125,9 @@
       return [a.city, a.town, a.village, a.municipality, a.county, x.name].some(v => norm(v) === wanted);
     });
     const hit = exact || list[0];
-    return { lat: Number(hit.lat), lon: Number(hit.lon), label: hit.display_name || q };
+    const lat=Number(hit.lat), lon=Number(hit.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat<35 || lat>48.5 || lon<5.5 || lon>19.5) throw new Error('La ricerca ha restituito coordinate non valide per l’Italia. Specifica comune e provincia.');
+    return {lat,lon,label:hit.display_name || q};
   }
 
   async function resolveEndpoint(which) {
@@ -165,16 +176,15 @@
   }
 
   function resetCoordOnInput(which) {
+    if(el.tripGoBtn.disabled){trip.runId++;trip.requestController?.abort();el.tripGoBtn.disabled=false;el.tripGoBtn.textContent='Calcola percorso';showMessage('Località modificata. Calcola nuovamente il percorso.');}
     if (which === 'from') trip.fromCoords = null;
     else trip.toCoords = null;
   }
 
   async function getRoute(from, to) {
     const coords = `${from.lon},${from.lat};${to.lon},${to.lat}`;
-    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true&alternatives=false`);
-    if (!r.ok) throw new Error('Servizio percorso non disponibile');
-    const p = await r.json();
-    if (p.code !== 'Ok' || !p.routes?.length) throw new Error('Percorso non trovato');
+    const p = await window.CarburantiServices.json(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true&alternatives=false`, {signal:trip.requestController?.signal,label:'Calcolo percorso'});
+    if (p.code !== 'Ok' || !p.routes?.length || !Array.isArray(p.routes[0].geometry?.coordinates) || p.routes[0].geometry.coordinates.length<2) throw new Error('Percorso non trovato');
     return p.routes[0];
   }
 
@@ -301,12 +311,16 @@
   }
 
   function popupHtml(station, price) {
-    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${station.lat},${station.lon}`)}`;
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${station.lat},${station.lon}`)}&travelmode=driving`;
+    const fuel=window.CarburantiApp.getFuel(), info=station.prices?.[fuel] || {};
+    const updated=new Date(info.updated || '');
+    const dateText=Number.isNaN(updated.getTime()) ? 'data non disponibile' : updated.toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const sale=info.self===true ? 'Self' : info.self===false ? 'Servito' : 'Modalità non indicata';
     return `<div class="trip-popup-inner" style="position:relative;min-width:210px;padding:2px 34px 2px 0">
       <button type="button" class="trip-popup-x" aria-label="Chiudi" title="Chiudi" style="position:absolute;right:-2px;top:-7px;width:32px;height:32px;border:0;background:transparent;color:#17212b;font-size:27px;line-height:30px;font-weight:900;cursor:pointer;z-index:30;padding:0">×</button>
       <div class="popup-title">${window.CarburantiApp.escapeHtml(station.name || station.brand || 'Distributore')}</div>
       <div class="popup-price">${window.CarburantiApp.money(price)}</div>
-      <div class="popup-meta">${window.CarburantiApp.escapeHtml(station.address || '')}${station.city ? ` · ${window.CarburantiApp.escapeHtml(station.city)}` : ''}<br>${station.highway ? 'Area/distributore autostradale' : `A ${station.routeDistanceKm.toFixed(1)} km dal percorso`}<br><a class="trip-popup-directions" href="${mapsUrl}" target="_blank" rel="noopener">Indicazioni</a></div>
+      <div class="popup-meta">${window.CarburantiApp.escapeHtml(station.address || '')}${station.city ? ` · ${window.CarburantiApp.escapeHtml(station.city)}` : ''}<br>${sale} · prezzo comunicato: ${window.CarburantiApp.escapeHtml(dateText)}<br>${station.highway ? 'Area autostradale · accesso da verificare' : `A ${station.routeDistanceKm.toFixed(1)} km dal percorso`}<br>${station.highway ? `<button class="trip-access-check" data-station-id="${window.CarburantiApp.escapeHtml(String(station.id))}">Verifica accesso sul percorso</button><span class="trip-access-result" role="status"></span>` : ''}<a class="trip-popup-directions" href="${mapsUrl}" target="_blank" rel="noopener">Indicazioni</a></div>
     </div>`;
   }
 
@@ -339,6 +353,8 @@
       });
     }
 
+    const access=root.querySelector('.trip-access-check');
+    if(access && !access.__accessBound){access.__accessBound=true;access.addEventListener('click',ev=>{ev.preventDefault();ev.stopPropagation();checkStationAccess(access);});}
     root.querySelectorAll('a').forEach(link => {
       link.style.pointerEvents = 'auto';
       link.style.touchAction = 'manipulation';
@@ -387,6 +403,7 @@
   function renderRoute(route, stations, motorwayInfo) {
     try { trip.map.closePopup(); } catch (_) {}
     trip.activePopup = null;
+    trip.currentRoute = route;
     trip.routeLayer.clearLayers();
     trip.stationLayer.clearLayers();
 
@@ -438,23 +455,61 @@
   }
 
   async function calculateTrip() {
+    if (el.tripGoBtn.disabled) return;
+    const runId = ++trip.runId;
+    trip.requestController?.abort();
+    trip.requestController = new AbortController();
     el.tripGoBtn.disabled = true;
     el.tripGoBtn.textContent = 'Calcolo…';
     try {
       await loadNationalData();
       showMessage('Ricerca località e calcolo del percorso…');
       const [from, to] = await Promise.all([resolveEndpoint('from'), resolveEndpoint('to')]);
+      if (runId !== trip.runId) return;
       const route = await getRoute(from, to), info = routeMotorwayInfo(route);
+      if (runId !== trip.runId) return;
       showMessage(info.significant ? 'Autostrada rilevata: separo rigorosamente autostrada e viabilità ordinaria…' : 'Ricerca distributori vicini al percorso…');
       const stations = candidateAlongRoute(route, info);
       renderRoute(route, stations, info);
     } catch (err) {
-      console.error(err);
-      showMessage(err.message || 'Impossibile calcolare il viaggio.');
+      if (runId === trip.runId && err.name !== 'AbortError') {console.error(err);showMessage(err.message || 'Impossibile calcolare il viaggio. Riprova.');trip.requestController?.abort();}
     } finally {
-      el.tripGoBtn.disabled = false;
-      el.tripGoBtn.textContent = 'Calcola percorso';
+      if (runId === trip.runId) {el.tripGoBtn.disabled = false;el.tripGoBtn.textContent = 'Calcola percorso';}
     }
+  }
+
+  async function checkStationAccess(button) {
+    const result = button.nextElementSibling;
+    const route = trip.currentRoute, runId = trip.runId;
+    const station = trip.nationalStations?.find(s => String(s.id) === button.dataset.stationId);
+    const points = route?.geometry?.coordinates;
+    if (!station || !points?.length) return;
+    button.disabled = true; result.textContent = 'Verifica della sosta nella direzione del percorso…';
+    try {
+      const km = (a,b) => window.CarburantiApp.haversineKm(a[1],a[0],b[1],b[0]);
+      let nearest = 0, best = Infinity;
+      points.forEach((p,i) => {const d=km(p,[station.lon,station.lat]);if(d<best){best=d;nearest=i;}});
+      let before=nearest, after=nearest, distance=0;
+      while(before>0 && distance<5){distance+=km(points[before],points[before-1]);before--;}
+      distance=0;
+      while(after<points.length-1 && distance<5){distance+=km(points[after],points[after+1]);after++;}
+      if(before===after) throw new Error('Tratto insufficiente per verificare la sosta. Usa Indicazioni.');
+      const fetchRoute = async coords => {
+        const p = await window.CarburantiServices.json(`https://router.project-osrm.org/route/v1/driving/${coords.map(p=>p.join(',')).join(';')}?overview=false&steps=true&continue_straight=true`,{signal:trip.requestController?.signal,label:'Verifica accesso'});
+        if(p.code!=='Ok'||!p.routes?.length||!Number.isFinite(p.routes[0].distance)) throw new Error('Accesso non verificabile. Controlla Indicazioni.');
+        return p.routes[0];
+      };
+      const direct = await fetchRoute([points[before],points[after]]);
+      const stop = await fetchRoute([points[before],[station.lon,station.lat],points[after]]);
+      if(runId!==trip.runId || !result.isConnected) return;
+      const steps=(stop.legs||[]).flatMap(l=>l.steps||[]);
+      const uturn=steps.some(s=>s.maneuver?.modifier==='uturn');
+      const exit=steps.some(s=>s.maneuver?.type==='off ramp');
+      const extra=Math.max(0,(stop.distance-direct.distance)/1000);
+      result.textContent = `${uturn?'Possibile inversione di marcia. ':exit?'Il percorso segnala una rampa di uscita. ':''}Deviazione stradale stimata: +${extra.toFixed(1)} km.${extra>5?' Sosta poco compatibile con il percorso.':''} Conferma accesso e carreggiata in Indicazioni.`;
+    } catch(err) {
+      if(err.name!=='AbortError' && result.isConnected) result.textContent=err.message;
+    } finally {button.disabled=false;}
   }
 
   function bind() {
@@ -465,6 +520,7 @@
       tripSummary: qs('tripSummary'), tripDistance: qs('tripDistance'), tripDuration: qs('tripDuration'),
       tripBest: qs('tripBest'), tripMessage: qs('tripMessage')
     });
+    el.tripPanel.addEventListener('click', ev => {const button=ev.target.closest('.trip-access-check');if(button){ev.preventDefault();checkStationAccess(button);}});
     el.tripOpenBtn.addEventListener('click', openTrip);
     el.tripCloseBtn.addEventListener('click', closeTrip);
     el.tripEndBtn.addEventListener('click', closeTrip);

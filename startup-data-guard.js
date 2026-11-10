@@ -13,7 +13,7 @@
 
   function statusText(payload) {
     const meta = payload.metadata || {};
-    const snapshot = meta.source_snapshot_date || meta.generated_at || null;
+    const snapshot = meta.generated_at || meta.source_snapshot_date || null;
     const stamp = snapshot ? new Date(snapshot) : null;
     const hasTime = typeof snapshot === 'string' && snapshot.includes('T');
     const dateText = stamp && !Number.isNaN(stamp.getTime())
@@ -30,6 +30,7 @@
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     if (!validPayload(payload)) throw new Error('Dataset incompleto');
+    payload.__offline = response.headers.get('X-Carburanti-Offline') === '1';
     return payload;
   }
 
@@ -38,10 +39,12 @@
     if (!app?.state || recovered) return false;
     recovered = true;
     app.state.metadata = payload.metadata || {};
+    app.state.dataOffline = payload.__offline === true;
     app.state.stations = payload.stations;
     app.state.loaded = true;
     const status = document.getElementById('dataStatus');
     if (status) status.textContent = statusText(payload);
+    window.dispatchEvent(new CustomEvent('carburanti:data-loaded'));
     try {
       document.querySelector('.fuel-tab.active')?.click();
       const zone = document.getElementById('zoneSelect');
