@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261110-priorities-1';
+  const VERSION = '20261110-priorities-2';
   const NATIONAL_DATA_URL = `data/stations-it.json?v=${VERSION}`;
   const ITALY_CENTER = [42.5, 12.5];
   const trip = {
@@ -60,6 +60,7 @@
 
   function openTrip() {
     trip.active = true;
+    if (!trip.requestController || trip.requestController.signal.aborted) trip.requestController = new AbortController();
     trip.userPos = window.CarburantiApp?.getUserPosition() || null;
     el.tripPanel.classList.remove('hidden');
     el.tripPanel.setAttribute('aria-hidden', 'false');

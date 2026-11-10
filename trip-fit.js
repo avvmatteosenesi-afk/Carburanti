@@ -61,6 +61,8 @@
   function fitCurrentRoute() {
     const map = getMap();
     if (!map) return false;
+    // A pending route-fit timer must not move a station popup the user just opened.
+    if (map._popup && map.hasLayer(map._popup)) return false;
     const line = findRouteLine(map);
     if (!line) return false;
     const bounds = line.getBounds?.();

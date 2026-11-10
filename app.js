@@ -540,7 +540,7 @@
     if ('serviceWorker' in navigator) {
       try {
         const hadController = Boolean(navigator.serviceWorker.controller);
-        const registration = await navigator.serviceWorker.register(`sw.js?v=20261110-priorities-1`, { scope: './' });
+        const registration = await navigator.serviceWorker.register(`sw.js?v=20261110-priorities-2`, { scope: './' });
         registration.update().catch(() => {});
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {

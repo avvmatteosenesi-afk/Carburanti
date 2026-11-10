@@ -57,4 +57,10 @@ test('motorway popup includes sale mode and checks directional detour',async({pa
  await page.locator('.trip-access-check').tap();
  await expect(page.locator('.trip-access-result')).toContainText('inversione');
  await expect(page.locator('.trip-access-result')).toContainText('+8.0 km');
+ await page.locator('#tripCloseBtn').tap();
+ await expect(page.locator('.trip-station-popup')).toHaveCount(0);
+ await page.locator('#tripOpenBtn').tap();
+ await page.evaluate(()=>{let opened=false;window.__carburantiTripMap.eachLayer(layer=>{if(!opened && layer.options?.pane==='tripStations'&&layer.getLatLng){opened=true;layer.fire('click');}});});
+ await page.locator('.trip-access-check').tap();
+ await expect(page.locator('.trip-access-result')).toContainText('+8.0 km');
 });
