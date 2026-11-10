@@ -6,7 +6,10 @@
   function render() {
     const state = window.CarburantiApp?.state, status = document.getElementById('dataStatus');
     if (!state?.loaded || !status) return;
-    const m = state.metadata || {}, acquired = date(m.generated_at);
+    const m = state.metadata || {};
+    const origins=Object.entries(m.api_fallback_acquired_at || {}).filter(([province])=>['AR','FI','GR','LI','LU','MS','PI','PT','PO','SI'].includes(province)).map(([,stamp])=>date(stamp)).filter(Boolean);
+    const stamps=[date(m.generated_at),...origins].filter(Boolean);
+    const acquired=stamps.length ? new Date(Math.min(...stamps.map(d=>d.getTime()))) : null;
     const stale = !acquired || Date.now() - acquired.getTime() > 48 * 3600000 || acquired.getTime() > Date.now() + 86400000;
     const offline = state.dataOffline || !navigator.onLine;
     const when = acquired ? acquired.toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'data assente';
@@ -27,7 +30,7 @@
     document.getElementById('dataInfoLatest').textContent = format(latest);
     document.getElementById('dataInfoSource').textContent = m.source || 'MIMIT';
     document.getElementById('dataInfoCoverage').textContent = `${(state.stations || []).length.toLocaleString('it-IT')} impianti Toscana${m.api_provinces ? ` · ${m.api_provinces} province acquisite in Italia` : ''}`;
-    document.getElementById('dataInfoConnection').textContent = offline ? 'Copia locale / offline' : 'Dati pubblicati disponibili';
+    document.getElementById('dataInfoConnection').textContent = (offline ? 'Copia locale / offline' : 'Dati pubblicati disponibili') + ((m.api_fallback_provinces || []).length ? ` · province dall’ultima pubblicazione: ${m.api_fallback_provinces.map(p=>`${p} (${format(date(m.api_fallback_acquired_at?.[p]))})`).join(', ')}` : '');
   }
   function close() { dialog.hidden = true; lastFocus?.focus(); }
   function open() { lastFocus = document.activeElement; dialog.hidden = false; render(); document.getElementById('dataInfoClose').focus(); }

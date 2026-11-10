@@ -39,6 +39,11 @@ def validate_dataset(rel, min_stations, min_prices):
     if generated is None or not -MAX_FUTURE_SKEW <= now - generated <= MAX_DATASET_AGE:
         raise SystemExit(f'{rel}: acquisizione assente, futura o più vecchia di 48 ore')
 
+    for province in metadata.get('api_fallback_provinces') or []:
+        original = parse_dt((metadata.get('api_fallback_acquired_at') or {}).get(province))
+        if original is None or not -MAX_FUTURE_SKEW <= now-original <= MAX_DATASET_AGE:
+            raise SystemExit(f'{rel}: fallback {province} senza acquisizione originale valida entro 48 ore')
+
     price_count = 0
     latest_price = None
     stale_prices = []

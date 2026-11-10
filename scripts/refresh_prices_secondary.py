@@ -12,6 +12,7 @@ from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
 from data_freshness import MAX_PRICE_AGE, parse_timestamp, price_is_current
 from pathlib import Path
+from provincial_fallback import fetch_published, select_province
 
 ROOT=Path(__file__).resolve().parents[1]; DATA=ROOT/'data'
 BASE='https://carburanti.mise.gov.it/ospzApi'
@@ -144,6 +145,17 @@ def main():
  provinces=[(region_by_province[p],p) for p in province_codes if p in region_by_province]
  if len(provinces)<90:raise RuntimeError(f'Elenco province incompleto ({len(provinces)})')
  fetched_provinces=api_stations=price_rows=new_stations=stale_price_rows=0; acquired_at=datetime.now(timezone.utc); fetched_at=acquired_at.isoformat(); fallback_provinces=[]
+ published=None; fallback_acquired={}; live_ids=set()
+ def reuse_province(province):
+  nonlocal published
+  if published is None:published=fetch_published()
+  selected,origin=select_province(published,province,acquired_at)
+  for old in by_id.values():
+   if old.get('province')==province and str(old['id']) not in live_ids:old['prices']={}
+  for station in selected:
+   if str(station['id']) not in live_ids:by_id[str(station['id'])]=station
+  fallback_acquired[province]=origin
+  print(f'{province}: riuso {len(selected)} impianti pubblicati, acquisizione originale {origin}; date prezzi conservate.',flush=True)
  for region,province in provinces:
   try:
    # fuelType intenzionalmente omesso: l'API restituisce tutti i carburanti.
@@ -153,12 +165,14 @@ def main():
    if isinstance(exc,urllib.error.HTTPError) and exc.code==429:
     raise RuntimeError('API MIMIT ancora limitata dopo le attese; interrompo per non moltiplicare le richieste') from exc
    fallback_provinces.append(province)
-   print(f'{province}: API non disponibile; mantengo la base MIMIT ({exc})',flush=True)
+   print(f'{province}: API non disponibile ({exc}); verifico la pubblicazione precedente.',flush=True)
+   reuse_province(province)
    if len(fallback_provinces)>17: break
    continue
   if not rows:
    fallback_provinces.append(province)
-   print(f'{province}: risposta API vuota; mantengo la base MIMIT',flush=True)
+   print(f'{province}: risposta API vuota; verifico la pubblicazione precedente.',flush=True)
+   reuse_province(province)
    if len(fallback_provinces)>17: break
    continue
   # Rimpiazza i dati di base solo per le province che hanno risposto con dati live.
@@ -170,6 +184,7 @@ def main():
    if not isinstance(item,dict) or item.get('id') is None:continue
    sid=str(item['id']); lat,lon=coords(item)
    if not valid_italy(lat,lon):continue
+   live_ids.add(sid)
    station=by_id.get(sid); address=item.get('address') or item.get('addr') or ''
    if station is None:
     station={'id':sid,'name':item.get('name') or 'Distributore','brand':item.get('brand') or item.get('bnd') or '','type':'','address':address,'city':'','province':province,'lat':round(lat,6),'lon':round(lon,6),'prices':{},'highway':highway(item.get('name') or '',address)}; by_id[sid]=station; new_stations+=1
@@ -204,7 +219,7 @@ def main():
  missing_tuscany=sorted(TUSCANY-{str(s.get('province','')).upper() for s in by_id.values() if s.get('prices')})
  if missing_tuscany:raise RuntimeError(f'API Osservaprezzi senza prezzi aggiornati in province toscane: {missing_tuscany}')
  stations=[s for s in by_id.values() if s.get('prices')]; stations.sort(key=lambda s:(s.get('province',''),s.get('city',''),s.get('name',''),str(s['id'])))
- meta={'generated_at':fetched_at,'source':'MIMIT Osservaprezzi - API pubblica v2','source_mode':'mimit-osservaprezzi-live-api-v2','source_snapshot_date':datetime.now(timezone.utc).date().isoformat(),'source_prices':f'{BASE}/search/area','stations':len(stations),'api_provinces':fetched_provinces,'api_fallback_provinces':fallback_provinces,'api_station_results':api_stations,'api_price_rows':price_rows,'price_max_age_days':MAX_PRICE_AGE.days,'api_discarded_price_rows':stale_price_rows}
+ meta={'generated_at':fetched_at,'source':'MIMIT Osservaprezzi - API pubblica v2','source_mode':'mimit-osservaprezzi-live-api-v2','source_snapshot_date':datetime.now(timezone.utc).date().isoformat(),'source_prices':f'{BASE}/search/area','stations':len(stations),'api_provinces':fetched_provinces,'api_fallback_provinces':fallback_provinces,'api_fallback_acquired_at':fallback_acquired,'api_station_results':api_stations,'api_price_rows':price_rows,'price_max_age_days':MAX_PRICE_AGE.days,'api_discarded_price_rows':stale_price_rows}
  national['stations']=stations; national['metadata'].update(meta)
  tus=[s for s in stations if s.get('province') in TUSCANY and within_bbox(s.get('province'),s['lat'],s['lon'])]
  old_tus=json.loads(tuscany_path.read_text(encoding='utf-8')); old_tus['stations']=tus; old_tus['metadata'].update(meta|{'stations':len(tus)})

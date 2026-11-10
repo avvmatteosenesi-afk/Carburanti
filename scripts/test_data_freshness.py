@@ -70,6 +70,12 @@ class FreshnessTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, 'nessun prezzo aggiornato'):
             self.validate(self.payload)
 
+    def test_new_build_cannot_hide_old_provincial_acquisition(self):
+        self.payload['metadata']['api_fallback_provinces']=['VV']
+        self.payload['metadata']['api_fallback_acquired_at']={'VV':(self.now-timedelta(hours=49)).isoformat()}
+        with self.assertRaisesRegex(SystemExit, 'fallback VV'):
+            self.validate(self.payload)
+
     def test_coverage_thresholds_still_enforced(self):
         with self.assertRaisesRegex(SystemExit, 'impianti'):
             self.validate(self.payload, min_stations=15000)
