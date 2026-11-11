@@ -191,10 +191,16 @@
   function applyPosition(pos) {
     rememberConsent();
     geoArmed = true;
-    savePosition(pos);
+    const app=window.CarburantiApp;
+    if(app && (!app.state.trackingAllowed || Number(pos.timestamp)>app.state.lastFixTimestamp)) app.acceptDevicePosition?.(pos,{centerAfter:app.state.zone==='position'});
+    const latest=app?.getUserPosition?.();
+    const effective=latest && app.state.lastFixTimestamp>Number(pos.timestamp || 0) ? {coords:{latitude:latest.lat,longitude:latest.lon,accuracy:latest.accuracy}} : pos;
+    savePosition(effective);
     closePrompt();
-    forceLocalView(pos);
-    setTimeout(() => forceLocalView(pos), 300);
+    forceLocalView(effective);
+    setTimeout(() => {
+      if(window.CarburantiApp?.state?.zone==='position') forceLocalView(window.CarburantiApp.getUserPosition() || pos);
+    },300);
   }
 
   function requestNative(req = {}) {

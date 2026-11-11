@@ -55,12 +55,14 @@
     map.setView([pos.lat, pos.lon], zoom, { animate: false });
     requestAnimationFrame(() => {
       map.invalidateSize(false);
-      map.panTo([pos.lat, pos.lon], { animate: false });
+      const latest=app.getUserPosition?.();
+      if(app.state.zone==='position' && latest) map.panTo([latest.lat,latest.lon], {animate:false});
       redrawUserDot();
     });
     setTimeout(() => {
       map.invalidateSize(false);
-      map.panTo([pos.lat, pos.lon], { animate: false });
+      const latest=app.getUserPosition?.();
+      if(app.state.zone==='position' && latest) map.panTo([latest.lat,latest.lon], {animate:false});
       redrawUserDot();
     }, 180);
     return true;
@@ -85,8 +87,9 @@
       if (ensureLocation() || checks > 100) clearInterval(timer);
     }, 100);
 
-    window.addEventListener('carburanti:location', () => {
+    window.addEventListener('carburanti:location', ev => {
       emphasizeUserPane();
+      if(ev.detail?.tracking) return;
       redrawUserDot();
       const zone = document.getElementById('zoneSelect')?.value;
       if (zone === 'position') centerOnUser(14);

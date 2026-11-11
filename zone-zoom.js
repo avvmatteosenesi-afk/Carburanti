@@ -97,7 +97,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     const select = document.getElementById('zoneSelect');
     select?.addEventListener('change', () => setTimeout(applyZoneZoom, 100));
-    window.addEventListener('carburanti:location', () => setTimeout(applyZoneZoom, 50));
+    window.addEventListener('carburanti:location', ev => {if(!ev.detail?.tracking) setTimeout(applyZoneZoom,50);});
     let checks = 0;
     const timer = setInterval(() => {
       checks += 1;

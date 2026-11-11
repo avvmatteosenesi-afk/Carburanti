@@ -45,6 +45,12 @@
     loaded: false,
     locating: false,
     lastLocationAt: 0,
+    locationWatchId: null,
+    trackingAllowed: false,
+    trackingDenied: false,
+    locationMove: false,
+    lastLocationRenderPos: null,
+    lastFixTimestamp: 0,
     lastVisibleStations: [],
     bestStation: null,
     markerById: new Map()
@@ -132,6 +138,7 @@
 
     state.map.on('moveend', () => {
       if (!state.loaded) return;
+      if (state.locationMove) {state.programmaticMove=false;return;}
       if (!state.programmaticMove) maybeSwitchToFreeMode();
       state.programmaticMove = false;
       renderStations();
@@ -400,6 +407,61 @@
     return 'Impossibile rilevare la posizione';
   }
 
+  function applyDevicePosition(pos, {tracking = false, centerAfter = false} = {}) {
+    const lat=pos?.coords?.latitude, lon=pos?.coords?.longitude;
+    const stamp=Number.isFinite(pos?.timestamp) ? pos.timestamp : Date.now();
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat)>90 || Math.abs(lon)>180 || stamp<state.lastFixTimestamp) return;
+    state.lastFixTimestamp=stamp;
+    state.lastLocationAt=Date.now();
+    state.userPos={lat,lon,accuracy:pos.coords.accuracy,provisional:false};
+    saveLastPosition(state.userPos);
+    drawUserLocation();
+    const popupOpen=Boolean(state.map._popup && state.map.hasLayer(state.map._popup));
+    if(state.zone==='position' && !popupOpen) {
+      if(tracking) {
+        state.programmaticMove=true;state.locationMove=true;
+        try {state.map.panTo([lat,lon],{animate:false});}
+        finally {state.locationMove=false;state.programmaticMove=false;}
+      } else if(centerAfter) {
+        el.zoneSelect.value='position';el.freeModeBadge.classList.add('hidden');fitLocalRadius();
+      }
+    }
+    const previous=state.lastLocationRenderPos;
+    const moved=!previous || haversineKm(previous.lat,previous.lon,lat,lon)>=0.025;
+    if(state.loaded && (!tracking || (state.zone==='position' && moved && !popupOpen))) {
+      state.lastLocationRenderPos={lat,lon};renderStations();
+    }
+    if(!tracking) showMapNotice(`Mia zona · 10 km${Number.isFinite(pos.coords.accuracy) ? ` · precisione ±${Math.round(pos.coords.accuracy)} m` : ''}`,3500);
+    window.dispatchEvent(new CustomEvent('carburanti:location',{detail:{...state.userPos,tracking}}));
+  }
+
+  function stopLocationTracking() {
+    if(state.locationWatchId!==null) {
+      navigator.geolocation?.clearWatch(state.locationWatchId);
+      state.locationWatchId=null;
+    }
+  }
+
+  function startLocationTracking() {
+    if(!state.trackingAllowed || document.hidden || state.locationWatchId!==null || !navigator.geolocation?.watchPosition) return;
+    state.locationWatchId=navigator.geolocation.watchPosition(
+      pos=>applyDevicePosition(pos,{tracking:true}),
+      err=>{
+        if(err?.code===1) {stopLocationTracking();state.trackingAllowed=false;state.trackingDenied=true;}
+        if(state.userPos) state.userPos.provisional=true;
+        showMapNotice(`${geolocationErrorMessage(err)} · ultima posizione conservata`,5000);
+      },
+      {enableHighAccuracy:true,maximumAge:0,timeout:20000}
+    );
+  }
+
+  function acceptDevicePosition(pos,{centerAfter=false}={}) {
+    state.locating=false;
+    applyDevicePosition(pos,{centerAfter});
+    state.trackingAllowed=true;state.trackingDenied=false;
+    startLocationTracking();
+  }
+
   function locateUser(centerAfter = true, { quiet = false } = {}) {
     if (!navigator.geolocation) {
       showMapNotice('Geolocalizzazione non disponibile su questo dispositivo', 5000);
@@ -410,26 +472,10 @@
     if (!quiet) showMapNotice('Rilevamento posizione…', 12000);
 
     navigator.geolocation.getCurrentPosition(pos => {
-      state.locating = false;
-      state.lastLocationAt = Date.now();
-      state.userPos = {
-        lat: pos.coords.latitude,
-        lon: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-        provisional: false
-      };
-      saveLastPosition(state.userPos);
-      drawUserLocation();
-      if (centerAfter && state.zone === 'position') {
-        el.zoneSelect.value = 'position';
-        el.freeModeBadge.classList.add('hidden');
-        fitLocalRadius();
-      }
-      renderStations();
-      showMapNotice(`Mia zona · 10 km${Number.isFinite(pos.coords.accuracy) ? ` · precisione ±${Math.round(pos.coords.accuracy)} m` : ''}`, 3500);
-      window.dispatchEvent(new CustomEvent('carburanti:location', { detail: state.userPos }));
+      acceptDevicePosition(pos,{centerAfter});
     }, err => {
       state.locating = false;
+      if(err?.code===1) {state.trackingDenied=true;state.trackingAllowed=false;stopLocationTracking();}
       if (state.zone === 'position') {
         if (state.userPos) {
           drawUserLocation();
@@ -473,11 +519,14 @@
     });
 
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && state.zone === 'position' && Date.now() - state.lastLocationAt > 120000) {
-        locateUser(false, { quiet: true });
-      }
+      if(document.hidden) stopLocationTracking();
+      else if(state.trackingAllowed) startLocationTracking();
+      else if(!state.trackingDenied && state.zone==='position' && Date.now()-state.lastLocationAt>120000) locateUser(false,{quiet:true});
     });
   }
+
+  window.addEventListener('pagehide',stopLocationTracking);
+  window.addEventListener('pageshow',()=>startLocationTracking());
 
   function openSettings() {
     const prefs = loadPrefs();
@@ -540,7 +589,7 @@
     if ('serviceWorker' in navigator) {
       try {
         const hadController = Boolean(navigator.serviceWorker.controller);
-        const registration = await navigator.serviceWorker.register(`sw.js?v=20261110-priorities-2`, { scope: './' });
+        const registration = await navigator.serviceWorker.register(`sw.js?v=20261111-live-gps-1`, { scope: './' });
         registration.update().catch(() => {});
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -559,6 +608,7 @@
     getFuel: () => state.fuel,
     getUserPosition: () => state.userPos,
     locateUser,
+    acceptDevicePosition,
     haversineKm,
     money,
     escapeHtml

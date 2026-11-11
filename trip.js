@@ -8,10 +8,12 @@
     map: null,
     routeLayer: null,
     stationLayer: null,
+    userLayer: null,
     nationalStations: null,
     fromCoords: null,
     toCoords: null,
     userPos: null,
+    lastFollowPos: null,
     active: false,
     activePopup: null,
     requestController: null,
@@ -56,6 +58,22 @@
 
     trip.routeLayer = L.layerGroup().addTo(trip.map);
     trip.stationLayer = L.layerGroup().addTo(trip.map);
+    trip.map.createPane('tripUser');trip.map.getPane('tripUser').style.zIndex='900';
+    trip.userLayer=L.layerGroup().addTo(trip.map);
+    updateTripPosition(trip.userPos);
+  }
+
+  function updateTripPosition(pos, follow=false) {
+    if(!pos || !trip.map || !trip.userLayer) return;
+    trip.userPos=pos;
+    if(!trip.lastFollowPos) trip.lastFollowPos={lat:pos.lat,lon:pos.lon};
+    trip.userLayer.clearLayers();
+    L.marker([pos.lat,pos.lon],{pane:'tripUser',interactive:false,icon:L.divIcon({className:'trip-user-location',html:'<div class="user-location"></div>',iconSize:[24,24],iconAnchor:[12,12]})}).addTo(trip.userLayer);
+    if(follow && trip.active && window.CarburantiApp.haversineKm(trip.lastFollowPos.lat,trip.lastFollowPos.lon,pos.lat,pos.lon)>=0.005 && !(trip.map._popup && trip.map.hasLayer(trip.map._popup))) {trip.map.__carburantiFollowingPosition=true;trip.lastFollowPos={lat:pos.lat,lon:pos.lon};trip.map.panTo([pos.lat,pos.lon],{animate:false});}
+    for(const which of ['from','to']) {
+      const key=which==='from'?'fromCoords':'toCoords';
+      if(trip[key]?.label==='Posizione attuale') trip[key]={lat:pos.lat,lon:pos.lon,label:'Posizione attuale'};
+    }
   }
 
   function openTrip() {
@@ -65,6 +83,7 @@
     el.tripPanel.classList.remove('hidden');
     el.tripPanel.setAttribute('aria-hidden', 'false');
     initTripMap();
+    updateTripPosition(trip.userPos,Boolean(trip.map.__carburantiFollowingPosition));
     setTimeout(() => trip.map.invalidateSize(false), 40);
     loadNationalData().catch(err => {
       console.error(err);
@@ -405,6 +424,8 @@
     try { trip.map.closePopup(); } catch (_) {}
     trip.activePopup = null;
     trip.currentRoute = route;
+    trip.map.__carburantiFollowingPosition=false;
+    trip.lastFollowPos=window.CarburantiApp.getUserPosition();
     trip.routeLayer.clearLayers();
     trip.stationLayer.clearLayers();
 
@@ -434,6 +455,7 @@
     const routeBounds = line.getBounds().pad(.035);
     setTimeout(() => {
       trip.map.invalidateSize(false);
+      if(trip.map.__carburantiFollowingPosition) return;
       trip.map.fitBounds(routeBounds, {
         paddingTopLeft: [30, 34],
         paddingBottomRight: [30, 34],
@@ -535,5 +557,6 @@
     }));
   }
 
+  window.addEventListener('carburanti:location',ev=>{if(ev.detail) updateTripPosition(ev.detail,ev.detail.tracking===true);});
   document.addEventListener('DOMContentLoaded', bind);
 })();
