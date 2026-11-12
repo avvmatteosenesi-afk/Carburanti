@@ -65,8 +65,11 @@ test('permission revocation stops tracking and does not start a new watch on res
 async function dragMap(page,selector){
  const b=await page.locator(selector).boundingBox();
  const x=b.x+b.width*.65,y=b.y+b.height*.35;
- await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x-95,y+45,{steps:12});await page.mouse.up();
- await page.waitForTimeout(200);
+ await page.evaluate(selector=>{window.__manualPanSettled=false;const map=selector==='#map'?window.CarburantiApp.state.map:window.__carburantiTripMap;map.once('moveend',()=>{window.__manualPanSettled=true;});},selector);
+ await page.mouse.move(x,y);await page.mouse.down();
+ for(let step=1;step<=12;step++){await page.mouse.move(x-95*step/12,y+45*step/12);await page.waitForTimeout(20);}
+ await page.mouse.up();
+ await expect.poll(()=>page.evaluate(()=>window.__manualPanSettled),{timeout:15000}).toBeTruthy();
 }
 
 test('manual pan stays put through GPS fixes, quiet refresh and background resume until Mia posizione',async({page})=>{
@@ -87,7 +90,10 @@ test('manual pan stays put through GPS fixes, quiet refresh and background resum
 });
 
 test('manual zoom suspends follow without stopping the position watch',async({page})=>{
- await setup(page);await page.locator('#map .leaflet-control-zoom-in').tap();await page.waitForTimeout(350);
+ await setup(page);
+ await page.evaluate(()=>{window.__manualZoomSettled=false;window.CarburantiApp.state.map.once('zoomend',()=>{window.__manualZoomSettled=true;});});
+ await page.locator('#map .leaflet-control-zoom-in').tap();
+ await expect.poll(()=>page.evaluate(()=>window.__manualZoomSettled)).toBeTruthy();
  const center=await page.evaluate(()=>window.CarburantiApp.state.map.getCenter());
  const zoom=await page.evaluate(()=>window.CarburantiApp.state.map.getZoom());
  await page.evaluate(()=>window.__pushGps(43.95,11.06));
