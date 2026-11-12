@@ -49,6 +49,7 @@
     trackingAllowed: false,
     trackingDenied: false,
     locationMove: false,
+    followLocation: true,
     lastLocationRenderPos: null,
     lastFixTimestamp: 0,
     lastVisibleStations: [],
@@ -133,6 +134,7 @@
     state.map.getPane('stationPane').style.zIndex = 650;
     state.map.createPane('userPane');
     state.map.getPane('userPane').style.zIndex = 720;
+    window.CarburantiMapNavigation.bind(state.map,()=>{state.followLocation=false;});
     state.stationLayer = L.layerGroup().addTo(state.map);
     state.userLayer = L.layerGroup().addTo(state.map);
 
@@ -296,6 +298,7 @@
   function focusBestStation() {
     const station = state.bestStation;
     if (!station) return;
+    state.followLocation=false;state.map.__carburantiManualNavigation=true;
     state.programmaticMove = true;
     state.map.setView([station.lat, station.lon], Math.max(15, state.map.getZoom()), { animate: true });
     setTimeout(() => {
@@ -349,15 +352,17 @@
   }
 
   function fitLocalRadius() {
-    if (!state.userPos) return;
+    if (!state.userPos || !state.followLocation) return;
     const bounds = L.latLng(state.userPos.lat, state.userPos.lon).toBounds(LOCAL_RADIUS_KM * 2000);
     mapFitBounds(bounds, 13, [28, 28]);
   }
 
-  function setZone(zone, { requestLocation = true } = {}) {
+  function setZone(zone, { requestLocation = true, resumeFollow = false } = {}) {
     state.zone = zone;
     el.zoneSelect.value = zone;
     el.freeModeBadge.classList.toggle('hidden', zone !== 'free');
+    if(resumeFollow) {state.map.__carburantiManualNavigation=false;if(zone==='position')state.followLocation=true;}
+    if(state.map.__carburantiManualNavigation) {renderStations();return;}
 
     if (zone === 'position') {
       if (!state.userPos && restoreLastPosition()) {
@@ -417,7 +422,7 @@
     saveLastPosition(state.userPos);
     drawUserLocation();
     const popupOpen=Boolean(state.map._popup && state.map.hasLayer(state.map._popup));
-    if(state.zone==='position' && !popupOpen) {
+    if(state.zone==='position' && state.followLocation && !popupOpen) {
       if(tracking) {
         state.programmaticMove=true;state.locationMove=true;
         try {state.map.panTo([lat,lon],{animate:false});}
@@ -494,9 +499,9 @@
 
   function bindUi() {
     document.querySelectorAll('.fuel-tab').forEach(btn => btn.addEventListener('click', () => setFuel(btn.dataset.fuel)));
-    el.zoneSelect.addEventListener('change', () => setZone(el.zoneSelect.value));
-    el.locateBtn.addEventListener('click', () => locateUser(true));
-    el.freeModeBadge.addEventListener('click', () => setZone('position'));
+    el.zoneSelect.addEventListener('change', () => setZone(el.zoneSelect.value,{resumeFollow:true}));
+    el.locateBtn.addEventListener('click', () => {state.followLocation=true;setZone('position',{resumeFollow:true});});
+    el.freeModeBadge.addEventListener('click', () => setZone('position',{resumeFollow:true}));
     el.bestCard.addEventListener('click', focusBestStation);
     el.bestCard.addEventListener('keydown', ev => {
       if ((ev.key === 'Enter' || ev.key === ' ') && state.bestStation) {
@@ -513,7 +518,7 @@
       state.fuel = el.defaultFuelSelect.value;
       document.querySelectorAll('.fuel-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.fuel === state.fuel));
       closeSettings();
-      setZone(el.defaultZoneSelect.value);
+      setZone(el.defaultZoneSelect.value,{resumeFollow:true});
       renderStations();
       showMapNotice('Impostazioni salvate');
     });
@@ -589,7 +594,7 @@
     if ('serviceWorker' in navigator) {
       try {
         const hadController = Boolean(navigator.serviceWorker.controller);
-        const registration = await navigator.serviceWorker.register(`sw.js?v=20261111-live-gps-1`, { scope: './' });
+        const registration = await navigator.serviceWorker.register(`sw.js?v=20261112-manual-pan-1`, { scope: './' });
         registration.update().catch(() => {});
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {

@@ -23,7 +23,7 @@
 
   function fitBoundsBalanced(bounds, maxZoom = 14, liftRoute = false) {
     const map = getMap();
-    if (!map || !bounds?.isValid?.() || map.__carburantiFollowingPosition) return false;
+    if (!map || !bounds?.isValid?.() || map.__carburantiFollowingPosition || map.__carburantiManualNavigation) return false;
 
     try { map.stop(); } catch (_) {}
     try { map.invalidateSize(false); } catch (_) {}

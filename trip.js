@@ -14,6 +14,8 @@
     toCoords: null,
     userPos: null,
     lastFollowPos: null,
+    followLocation: true,
+    locateRequested: false,
     active: false,
     activePopup: null,
     requestController: null,
@@ -56,6 +58,18 @@
       popupPane.style.pointerEvents = 'auto';
     }
 
+    window.CarburantiMapNavigation.bind(trip.map,()=>{trip.followLocation=false;trip.map.__carburantiFollowingPosition=false;});
+    const locate=L.control({position:'bottomright'});
+    locate.onAdd=()=>{
+      const box=L.DomUtil.create('div','leaflet-bar');
+      const button=document.createElement('button');button.id='tripLocateBtn';button.type='button';button.textContent='⌖';
+      button.setAttribute('aria-label','Mia posizione sulla mappa viaggio');button.title='Centra e segui la mia posizione';
+      button.style.cssText='width:36px;height:36px;border:0;background:#fff;color:#1267d6;font-size:24px;cursor:pointer';
+      box.appendChild(button);L.DomEvent.disableClickPropagation(box);
+      button.addEventListener('click',()=>{trip.followLocation=true;trip.locateRequested=true;trip.map.__carburantiManualNavigation=false;
+        const pos=window.CarburantiApp.getUserPosition();if(pos)updateTripPosition(pos,true);else window.CarburantiApp.locateUser(false);});
+      return box;
+    };locate.addTo(trip.map);
     trip.routeLayer = L.layerGroup().addTo(trip.map);
     trip.stationLayer = L.layerGroup().addTo(trip.map);
     trip.map.createPane('tripUser');trip.map.getPane('tripUser').style.zIndex='900';
@@ -69,7 +83,8 @@
     if(!trip.lastFollowPos) trip.lastFollowPos={lat:pos.lat,lon:pos.lon};
     trip.userLayer.clearLayers();
     L.marker([pos.lat,pos.lon],{pane:'tripUser',interactive:false,icon:L.divIcon({className:'trip-user-location',html:'<div class="user-location"></div>',iconSize:[24,24],iconAnchor:[12,12]})}).addTo(trip.userLayer);
-    if(follow && trip.active && window.CarburantiApp.haversineKm(trip.lastFollowPos.lat,trip.lastFollowPos.lon,pos.lat,pos.lon)>=0.005 && !(trip.map._popup && trip.map.hasLayer(trip.map._popup))) {trip.map.__carburantiFollowingPosition=true;trip.lastFollowPos={lat:pos.lat,lon:pos.lon};trip.map.panTo([pos.lat,pos.lon],{animate:false});}
+    if(trip.locateRequested && trip.active) {trip.locateRequested=false;trip.map.__carburantiFollowingPosition=true;trip.lastFollowPos={lat:pos.lat,lon:pos.lon};trip.map.panTo([pos.lat,pos.lon],{animate:false});}
+    if(follow && trip.followLocation && trip.active && window.CarburantiApp.haversineKm(trip.lastFollowPos.lat,trip.lastFollowPos.lon,pos.lat,pos.lon)>=0.005 && !(trip.map._popup && trip.map.hasLayer(trip.map._popup))) {trip.map.__carburantiFollowingPosition=true;trip.lastFollowPos={lat:pos.lat,lon:pos.lon};trip.map.panTo([pos.lat,pos.lon],{animate:false});}
     for(const which of ['from','to']) {
       const key=which==='from'?'fromCoords':'toCoords';
       if(trip[key]?.label==='Posizione attuale') trip[key]={lat:pos.lat,lon:pos.lon,label:'Posizione attuale'};
@@ -425,6 +440,7 @@
     trip.activePopup = null;
     trip.currentRoute = route;
     trip.map.__carburantiFollowingPosition=false;
+    trip.map.__carburantiManualNavigation=false;
     trip.lastFollowPos=window.CarburantiApp.getUserPosition();
     trip.routeLayer.clearLayers();
     trip.stationLayer.clearLayers();

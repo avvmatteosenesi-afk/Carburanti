@@ -152,7 +152,7 @@
     const map = state?.map;
     const lat = Number(posLike?.lat ?? posLike?.coords?.latitude ?? state?.userPos?.lat);
     const lon = Number(posLike?.lon ?? posLike?.coords?.longitude ?? state?.userPos?.lon);
-    if (!map || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    if (!map || state.followLocation===false || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
     state.userPos = {
       lat,

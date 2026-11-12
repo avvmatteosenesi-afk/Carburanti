@@ -61,3 +61,49 @@ test('permission revocation stops tracking and does not start a new watch on res
  await page.evaluate(()=>{window.CarburantiApp.state.lastLocationAt=Date.now()-180000;document.dispatchEvent(new Event('visibilitychange'));});
  expect(await page.evaluate(()=>window.__watchStats.started)).toBe(count);
 });
+
+async function dragMap(page,selector){
+ const b=await page.locator(selector).boundingBox();
+ const x=b.x+b.width*.65,y=b.y+b.height*.35;
+ await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x-95,y+45,{steps:12});await page.mouse.up();
+ await page.waitForTimeout(200);
+}
+
+test('manual pan stays put through GPS fixes, quiet refresh and background resume until Mia posizione',async({page})=>{
+ await setup(page);await dragMap(page,'#map');
+ expect(await page.evaluate(()=>window.CarburantiApp.state.followLocation)).toBe(false);
+ const center=await page.evaluate(()=>window.CarburantiApp.state.map.getCenter());
+ await page.evaluate(()=>{window.__pushGps(43.95,11.06);window.CarburantiApp.locateUser(false,{quiet:true});});
+ await page.waitForTimeout(450);
+ expect(await page.evaluate(()=>window.CarburantiApp.state.map.getCenter())).toEqual(center);
+ expect(await page.evaluate(()=>window.CarburantiApp.getUserPosition().lat)).toBe(43.95);
+ await page.evaluate(()=>{window.__gpsHidden=true;document.dispatchEvent(new Event('visibilitychange'));window.__pushGps(43.96,11.07);window.__gpsHidden=false;document.dispatchEvent(new Event('visibilitychange'));});
+ await expect.poll(()=>page.evaluate(()=>window.CarburantiApp.getUserPosition().lat)).toBe(43.96);
+ expect(await page.evaluate(()=>window.CarburantiApp.state.map.getCenter())).toEqual(center);
+ await page.locator('#locateBtn').tap();await page.waitForTimeout(350);
+ expect(await page.evaluate(()=>window.CarburantiApp.state.followLocation)).toBe(true);
+ await page.evaluate(()=>window.__pushGps(43.97,11.08));
+ await expect.poll(()=>page.evaluate(()=>window.CarburantiApp.state.map.getCenter().lat)).toBeCloseTo(43.97,3);
+});
+
+test('manual zoom suspends follow without stopping the position watch',async({page})=>{
+ await setup(page);await page.locator('#map .leaflet-control-zoom-in').tap();await page.waitForTimeout(350);
+ const center=await page.evaluate(()=>window.CarburantiApp.state.map.getCenter());
+ const zoom=await page.evaluate(()=>window.CarburantiApp.state.map.getZoom());
+ await page.evaluate(()=>window.__pushGps(43.95,11.06));
+ expect(await page.evaluate(()=>window.CarburantiApp.state.map.getCenter())).toEqual(center);
+ expect(await page.evaluate(()=>window.CarburantiApp.state.map.getZoom())).toBe(zoom);
+ expect(await page.evaluate(()=>window.CarburantiApp.getUserPosition().lat)).toBe(43.95);
+});
+
+test('manual trip pan survives GPS updates and pending fits, then the position control resumes follow',async({page})=>{
+ await setup(page);await page.locator('#tripOpenBtn').tap();await page.waitForTimeout(100);
+ await dragMap(page,'#tripMap');
+ const center=await page.evaluate(()=>window.__carburantiTripMap.getCenter());
+ await page.evaluate(()=>window.__pushGps(43.95,11.06));await page.waitForTimeout(650);
+ expect(await page.evaluate(()=>window.__carburantiTripMap.getCenter())).toEqual(center);
+ await expect(page.locator('#tripMap .trip-user-location')).toHaveCount(1);
+ await page.locator('#tripLocateBtn').tap();
+ const offset=await page.evaluate(()=>{const m=window.__carburantiTripMap,p=m.latLngToContainerPoint([43.95,11.06]),s=m.getSize();return Math.hypot(p.x-s.x/2,p.y-s.y/2);});
+ expect(offset).toBeLessThan(2);
+});

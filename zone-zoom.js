@@ -55,7 +55,7 @@
     const app = window.CarburantiApp;
     const map = app?.state?.map;
     const select = document.getElementById('zoneSelect');
-    if (!map || !select) return false;
+    if (!map || !select || map.__carburantiManualNavigation) return false;
     const zone = select.value;
     app.state.programmaticMove = true;
 

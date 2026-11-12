@@ -7,7 +7,8 @@
     const map = state?.map;
     const current = app?.getUserPosition?.();
     const zone = document.getElementById('zoneSelect');
-    if (state) { state.zone = 'position'; state.locating = false; state.programmaticMove = true; }
+    if (state) { state.zone = 'position'; state.locating = false; state.programmaticMove = true;state.followLocation=true; }
+    if(map) map.__carburantiManualNavigation=false;
     if (zone) zone.value = 'position';
     document.getElementById('freeModeBadge')?.classList.add('hidden');
     if (map && current && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {

@@ -49,20 +49,20 @@
     const app = window.CarburantiApp;
     const pos = app?.getUserPosition?.();
     const map = app?.state?.map;
-    if (!pos || !map || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lon)) return false;
+    if (!pos || !map || app.state.followLocation===false || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lon)) return false;
     app.state.programmaticMove = true;
     map.invalidateSize(false);
     map.setView([pos.lat, pos.lon], zoom, { animate: false });
     requestAnimationFrame(() => {
       map.invalidateSize(false);
       const latest=app.getUserPosition?.();
-      if(app.state.zone==='position' && latest) map.panTo([latest.lat,latest.lon], {animate:false});
+      if(app.state.zone==='position' && app.state.followLocation!==false && latest) map.panTo([latest.lat,latest.lon], {animate:false});
       redrawUserDot();
     });
     setTimeout(() => {
       map.invalidateSize(false);
       const latest=app.getUserPosition?.();
-      if(app.state.zone==='position' && latest) map.panTo([latest.lat,latest.lon], {animate:false});
+      if(app.state.zone==='position' && app.state.followLocation!==false && latest) map.panTo([latest.lat,latest.lon], {animate:false});
       redrawUserDot();
     }, 180);
     return true;
