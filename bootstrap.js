@@ -6,7 +6,7 @@
   const LAST_POSITION_KEY = 'carburanti:last-position:v1';
   const RAW_BASE = 'https://raw.githubusercontent.com/avvmatteosenesi-afk/Carburanti/main/data/';
   const LOCAL_RADIUS_KM = 10;
-  const INITIAL_LOCAL_ZOOM = 13;
+  const INITIAL_LOCAL_ZOOM = 15;
   const nativeFetch = window.fetch.bind(window);
 
   // Fallback dei dataset: se GitHub Pages non risponde, prova il file raw del repository.

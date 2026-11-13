@@ -45,7 +45,7 @@
     return true;
   }
 
-  function centerOnUser(zoom = 14) {
+  function centerOnUser(zoom = 15) {
     const app = window.CarburantiApp;
     const pos = app?.getUserPosition?.();
     const map = app?.state?.map;
@@ -92,7 +92,7 @@
       if(ev.detail?.tracking) return;
       redrawUserDot();
       const zone = document.getElementById('zoneSelect')?.value;
-      if (zone === 'position') centerOnUser(14);
+      if (zone === 'position') centerOnUser(15);
     });
 
     document.getElementById('zoneSelect')?.addEventListener('change', () => {
@@ -102,7 +102,7 @@
         const zone = document.getElementById('zoneSelect')?.value;
         if (app?.getUserPosition?.()) {
           redrawUserDot();
-          if (zone === 'position') centerOnUser(14);
+          if (zone === 'position') centerOnUser(15);
         } else if (!app?.state?.locating) app?.locateUser?.(false, { quiet: true });
       }, 120);
     });
@@ -110,7 +110,7 @@
     document.getElementById('locateBtn')?.addEventListener('click', () => {
       setTimeout(() => {
         const app = window.CarburantiApp;
-        if (app?.getUserPosition?.()) centerOnUser(14);
+        if (app?.getUserPosition?.()) centerOnUser(15);
       }, 220);
     });
 

@@ -594,7 +594,7 @@
     if ('serviceWorker' in navigator) {
       try {
         const hadController = Boolean(navigator.serviceWorker.controller);
-        const registration = await navigator.serviceWorker.register(`sw.js?v=20261113-initial-zoom-2`, { scope: './' });
+        const registration = await navigator.serviceWorker.register(`sw.js?v=20261113-initial-zoom-3`, { scope: './' });
         registration.update().catch(() => {});
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
