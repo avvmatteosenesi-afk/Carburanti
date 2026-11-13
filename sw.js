@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'carburanti-shell-20261112-manual-pan-1';
+const CACHE_VERSION = 'carburanti-shell-20261113-initial-zoom-1';
 const DATA_CACHE = 'carburanti-data-v2';
 const SHELL = [
   "map-navigation.js?v=20261112-manual-pan-1",
@@ -25,7 +25,7 @@ const SHELL = [
   "trip.js?v=20261112-manual-pan-1",
   "trip-fit.js?v=20261112-manual-pan-1",
   "trip-detour.js?v=20261024-1",
-  "zone-zoom.js?v=20261112-manual-pan-1",
+  "zone-zoom.js?v=20261113-initial-zoom-1",
   "home-ui.js?v=20261112-manual-pan-1",
   "refresh-ui.js?v=20261105-refresh-slot-1",
   "ux-enhancements.js?v=20261105-quick-head-1",

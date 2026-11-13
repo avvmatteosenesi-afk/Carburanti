@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const LOCAL_ZOOM = 14;
+  const LOCAL_ZOOM = 15;
   const TUSCANY_BOUNDS = [[42.20, 9.72], [44.53, 12.22]];
 
   const PROVINCES = {

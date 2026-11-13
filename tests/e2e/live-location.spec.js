@@ -17,6 +17,16 @@ async function setup(page){
  await expect.poll(()=>page.evaluate(()=>window.CarburantiApp?.state?.loaded)).toBeTruthy();
  await page.waitForTimeout(500);
 }
+test('Mia zona opens one zoom level closer without changing GPS follow',async({page})=>{
+ await setup(page);
+ await expect.poll(()=>page.evaluate(()=>window.CarburantiApp.state.map.getZoom())).toBe(15);
+ const position=await page.evaluate(()=>window.CarburantiApp.getUserPosition());
+ const center=await page.evaluate(()=>window.CarburantiApp.state.map.getCenter());
+ expect(Math.abs(center.lat-position.lat)).toBeLessThan(0.001);
+ expect(Math.abs(center.lng-position.lon)).toBeLessThan(0.001);
+ expect(await page.evaluate(()=>window.CarburantiApp.state.followLocation)).toBe(true);
+});
+
 test('moving GPS updates the open local map, dot, radius and prices without a tap',async({page})=>{
  await setup(page);
  await page.evaluate(()=>window.CarburantiApp.state.map.setZoom(16,{animate:false}));
