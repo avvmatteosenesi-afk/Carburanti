@@ -353,8 +353,8 @@
 
   function fitLocalRadius() {
     if (!state.userPos || !state.followLocation) return;
-    const bounds = L.latLng(state.userPos.lat, state.userPos.lon).toBounds(LOCAL_RADIUS_KM * 2000);
-    mapFitBounds(bounds, 13, [28, 28]);
+    state.programmaticMove = true;
+    state.map.setView([state.userPos.lat, state.userPos.lon], 15, { animate: false });
   }
 
   function setZone(zone, { requestLocation = true, resumeFollow = false } = {}) {
@@ -594,7 +594,7 @@
     if ('serviceWorker' in navigator) {
       try {
         const hadController = Boolean(navigator.serviceWorker.controller);
-        const registration = await navigator.serviceWorker.register(`sw.js?v=20261112-manual-pan-1`, { scope: './' });
+        const registration = await navigator.serviceWorker.register(`sw.js?v=20261113-initial-zoom-2`, { scope: './' });
         registration.update().catch(() => {});
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {

@@ -12,7 +12,7 @@
     if (zone) zone.value = 'position';
     document.getElementById('freeModeBadge')?.classList.add('hidden');
     if (map && current && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {
-      try { map.invalidateSize(false); map.setView([current.lat, current.lon], 13, { animate: true }); } catch (_) {}
+      try { map.invalidateSize(false); map.setView([current.lat, current.lon], 15, { animate: true }); } catch (_) {}
       setTimeout(() => { try { document.querySelector('.fuel-tab.active')?.click(); } catch (_) {} }, 80);
     }
     const notice = document.getElementById('mapNotice');
