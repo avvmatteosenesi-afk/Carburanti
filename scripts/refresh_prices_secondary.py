@@ -158,6 +158,7 @@ def main():
   for old in by_id.values():
    if old.get('province')==province and str(old['id']) not in live_ids:old['prices']={}
   for station in selected:
+   station['prices']={fuel:price for fuel,price in station.get('prices',{}).items() if price.get('self') is True}
    if str(station['id']) not in live_ids:by_id[str(station['id'])]=station
   fallback_acquired[province]=origin
   print(f'{province}: riuso {len(selected)} impianti pubblicati, acquisizione originale {origin}; date prezzi conservate.',flush=True)
@@ -207,6 +208,7 @@ def main():
     price=parse_float(p.get('price') if 'price' in p else p.get('prezzo'))
     if price is None or not 0<price<10:continue
     selfv=str(p.get('isSelf') if 'isSelf' in p else p.get('self',0)).lower() in ('1','true')
+    if not selfv:continue
     updated=p.get('dtComu') or p.get('updated') or p.get('date') or item.get('insertDate')
     parsed_updated=parse_timestamp(updated)
     # Leave two hours for validation, tests and Pages propagation so a price
@@ -223,6 +225,8 @@ def main():
  # Verifica che ogni provincia e ogni prezzo scritto siano realmente presenti e datati.
  missing_tuscany=sorted(TUSCANY-{str(s.get('province','')).upper() for s in by_id.values() if s.get('prices')})
  if missing_tuscany:raise RuntimeError(f'API Osservaprezzi senza prezzi aggiornati in province toscane: {missing_tuscany}')
+ for station in by_id.values():
+  station['prices']={fuel:price for fuel,price in station.get('prices',{}).items() if price.get('self') is True}
  stations=[s for s in by_id.values() if s.get('prices')]; stations.sort(key=lambda s:(s.get('province',''),s.get('city',''),s.get('name',''),str(s['id'])))
  meta={'generated_at':fetched_at,'source':'MIMIT Osservaprezzi - API pubblica v2','source_mode':'mimit-osservaprezzi-live-api-v2','source_snapshot_date':datetime.now(timezone.utc).date().isoformat(),'source_prices':f'{BASE}/search/area','stations':len(stations),'api_provinces':fetched_provinces,'api_fallback_provinces':fallback_provinces,'api_fallback_acquired_at':fallback_acquired,'api_station_results':api_stations,'api_price_rows':price_rows,'price_max_age_days':MAX_PRICE_AGE.days,'api_discarded_price_rows':stale_price_rows}
  national['stations']=stations; national['metadata'].update(meta)
