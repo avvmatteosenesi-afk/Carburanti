@@ -81,10 +81,15 @@ def within_bbox(code,lat,lon):
 def highway(name,address):
  t=f'{name} {address}'.lower(); return 'autostrad' in t or 'area di servizio' in t
 def choose(old,cand):
+ # Prefer self-service within each fuel, but never replace a selected price
+ # with an older communication for the same service mode.
  if old is None:return cand
  if cand['self'] and not old['self']:return cand
  if old['self'] and not cand['self']:return old
- return cand
+ old_date=parse_timestamp(old.get('updated'))
+ new_date=parse_timestamp(cand.get('updated'))
+ if new_date and (not old_date or new_date>=old_date):return cand
+ return old
 def unwrap_rows(payload):
  if isinstance(payload,list):return payload
  if not isinstance(payload,dict):return []
