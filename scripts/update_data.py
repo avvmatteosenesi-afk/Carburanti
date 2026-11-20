@@ -240,7 +240,9 @@ def main():
         if not fuel: continue
         price = parse_float(row.get("prezzo"))
         if price is None or price <= 0 or price > 10: continue
-        price_rows += 1; self_mode = parse_bool(row.get("isself") or row.get("self") or "")
+        self_mode = parse_bool(row.get("isself") or row.get("self") or "")
+        if not self_mode: continue
+        price_rows += 1
         updated_raw = row.get("dtcomu") or row.get("datacomunicazione") or row.get("data") or ""
         candidate = {"price":round(price,3),"self":self_mode,"updated":iso_date(updated_raw),"updated_raw":updated_raw}
         key = (sid, fuel); selected_prices[key] = choose_price(selected_prices.get(key), candidate)
