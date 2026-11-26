@@ -19,7 +19,7 @@
     ['fiorentina','Fiorentina','Curva Fiesole','#562482','#dbb8ef'],
     ['litfiba','Litfiba','Gli anni Ottanta','#380e1a','#de483c'],
     ['fontaines-dc','Fontaines D.C.','Post-punk a Dublino','#172634','#afc662'],
-    ['los-angeles-lakers','Los Angeles Lakers','Viola e oro','#35175f','#efb843'],
+    ['los-angeles-lakers','Los Angeles Lakers','Magic Johnson e Kobe Bryant','#35175f','#efb843'],
     ['uomo-tigre','L’Uomo Tigre','Il ring','#192b50','#ea9c38']
   ];
   function ensureStatsStyles(){if(document.querySelector('link[data-price-stats-fixed]'))return;const link=document.createElement('link');link.rel='stylesheet';link.href='price-stats-fixed.css?v=20261030-1';link.dataset.priceStatsFixed='1';document.head.appendChild(link)}
