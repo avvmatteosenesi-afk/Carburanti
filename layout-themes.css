@@ -153,3 +153,66 @@ body[data-layout] .topbar{
   background-repeat:no-repeat,no-repeat!important;
 }
 @media(max-width:700px){body[data-layout] .topbar{background-size:cover,cover!important;background-position:left top,center center!important}}
+
+#settingsPanel .sheet {
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body[data-layout="fiorentina"] {
+  --theme-bg: #f3e8ff;
+  --theme-top-a: #562482;
+  --theme-top-b: #dbb8ef;
+  --theme-accent: #55237d;
+  --theme-soft: #f9f1ff;
+  --theme-edge: #442063;
+  --theme-art: url("theme-banners/fiorentina.webp?v=20261126-five-themes-1");
+}
+
+body[data-layout="litfiba"] {
+  --theme-bg: #fae9e5;
+  --theme-top-a: #380e1a;
+  --theme-top-b: #de483c;
+  --theme-accent: #931f31;
+  --theme-soft: #fff3ed;
+  --theme-edge: #5b1728;
+  --theme-art: url("theme-banners/litfiba.webp?v=20261126-five-themes-1");
+}
+
+body[data-layout="fontaines-dc"] {
+  --theme-bg: #e9eef0;
+  --theme-top-a: #172634;
+  --theme-top-b: #afc662;
+  --theme-accent: #34536a;
+  --theme-soft: #f2f7f5;
+  --theme-edge: #293d4d;
+  --theme-art: url("theme-banners/fontaines-dc.webp?v=20261126-five-themes-1");
+}
+
+body[data-layout="los-angeles-lakers"] {
+  --theme-bg: #f5eafd;
+  --theme-top-a: #35175f;
+  --theme-top-b: #efb843;
+  --theme-accent: #57258c;
+  --theme-soft: #fff8e5;
+  --theme-edge: #43236b;
+  --theme-art: url("theme-banners/los-angeles-lakers.webp?v=20261126-five-themes-1");
+}
+
+body[data-layout="uomo-tigre"] {
+  --theme-bg: #eef2fa;
+  --theme-top-a: #192b50;
+  --theme-top-b: #ea9c38;
+  --theme-accent: #253f76;
+  --theme-soft: #fff4e3;
+  --theme-edge: #253756;
+  --theme-art: url("theme-banners/uomo-tigre.webp?v=20261126-five-themes-1");
+}
+
+@media (min-width: 701px) {
+  body:is([data-layout="fiorentina"], [data-layout="los-angeles-lakers"]) .topbar {
+    background-size: cover, cover !important;
+    background-position: left center, center !important;
+  }
+}

@@ -29,8 +29,8 @@ from io import BytesIO
 from PIL import Image
 css=get('layout-themes.css').decode('utf-8')
 banners=sorted(set(re.findall(r'theme-banners/([a-z0-9-]+)\.webp',css)))
-if len(banners)!=13:
- raise SystemExit(f'CSS temi: attesi 13 banner distinti, trovati {len(banners)}: {banners}')
+if len(banners)!=18:
+ raise SystemExit(f'CSS temi: attesi 18 banner distinti, trovati {len(banners)}: {banners}')
 for name in banners:
  raw=get(f'theme-banners/{name}.webp')
  if len(raw)<100 or raw[:4]!=b'RIFF' or raw[8:12]!=b'WEBP':

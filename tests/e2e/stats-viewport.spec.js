@@ -1,6 +1,7 @@
 const { test, expect, devices } = require('@playwright/test');
 
-const layouts = ['current','dragon','arale','daitarn','jeeg','harlock','mazinga','goldrake','lamu','kenshiro','candy','yattaman','lupin','oscar'];
+const layouts = ['current','dragon','arale','daitarn','jeeg','harlock','mazinga','goldrake','lamu','kenshiro','candy','yattaman','lupin','oscar',
+  'fiorentina','litfiba','fontaines-dc','los-angeles-lakers','uomo-tigre'];
 
 async function assertInsideViewport(page, selector) {
   const box = await page.locator(selector).boundingBox();
