@@ -167,7 +167,7 @@ body[data-layout="fiorentina"] {
   --theme-accent: #55237d;
   --theme-soft: #f9f1ff;
   --theme-edge: #442063;
-  --theme-art: url("theme-banners/fiorentina.webp?v=20261126-five-themes-1");
+  --theme-art: url("theme-banners/fiorentina.webp?v=20261126-viola-legends-1");
 }
 
 body[data-layout="litfiba"] {
@@ -210,21 +210,20 @@ body[data-layout="uomo-tigre"] {
   --theme-art: url("theme-banners/uomo-tigre.webp?v=20261126-five-themes-1");
 }
 
-@media (min-width: 701px) {
-  body[data-layout="fiorentina"] .topbar {
-    background-size: cover, cover !important;
-    background-position: left center, center !important;
-  }
-}
-
-/* Show the portraits and crest together, with the arena behind the controls. */
-body[data-layout="los-angeles-lakers"] .topbar {
+/* Show the portraits and team artwork together, with the arena behind the controls. */
+body:is([data-layout="los-angeles-lakers"], [data-layout="fiorentina"]) .topbar {
   background-size: 320% auto, cover !important;
   background-position: right 58%, center !important;
 }
 
-body[data-layout="los-angeles-lakers"] .topbar::before {
+body:is([data-layout="los-angeles-lakers"], [data-layout="fiorentina"]) .topbar::before {
   width: min(86%, 480px);
   background: var(--theme-art) left top / 100% auto no-repeat;
   mask-image: linear-gradient(to right, black 72%, transparent);
+}
+
+/* Keep the Florentine skyline visible across the Curva Fiesole. */
+body[data-layout="fiorentina"] .topbar {
+  background-size: 145% auto, cover !important;
+  background-position: right 47%, center !important;
 }

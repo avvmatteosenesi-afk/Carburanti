@@ -16,7 +16,7 @@
     ['yattaman','Yattaman','Azione e cielo','#087bc1','#e33131'],
     ['lupin','Lupin III','Lupin in primo piano','#9d1717','#f1c43b'],
     ['oscar','Lady Oscar','Versailles','#a77b28','#f1d58b'],
-    ['fiorentina','Fiorentina','Curva Fiesole','#562482','#dbb8ef'],
+    ['fiorentina','Fiorentina','Batistuta e Roberto Baggio','#562482','#dbb8ef'],
     ['litfiba','Litfiba','Gli anni Ottanta','#380e1a','#de483c'],
     ['fontaines-dc','Fontaines D.C.','Post-punk a Dublino','#172634','#afc662'],
     ['los-angeles-lakers','Los Angeles Lakers','Magic Johnson e Kobe Bryant','#35175f','#efb843'],
