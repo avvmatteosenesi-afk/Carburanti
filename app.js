@@ -594,7 +594,7 @@
     if ('serviceWorker' in navigator) {
       try {
         const hadController = Boolean(navigator.serviceWorker.controller);
-        const registration = await navigator.serviceWorker.register(`sw.js?v=20261126-viola-legends-2`, { scope: './' });
+        const registration = await navigator.serviceWorker.register(`sw.js?v=20261127-viola-b298e57d`, { scope: './' });
         registration.update().catch(() => {});
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
